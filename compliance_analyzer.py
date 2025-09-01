@@ -2,25 +2,8 @@ import os
 import sys
 import logging
 from openai import OpenAI
-import locale
-
-# Force UTF-8 encoding throughout the application
-import codecs
-sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
-sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
-
-# Set UTF-8 encoding for the environment
-os.environ['PYTHONIOENCODING'] = 'utf-8'
-os.environ['LC_ALL'] = 'C.UTF-8'
-os.environ['LANG'] = 'C.UTF-8'
-
-try:
-    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
-except:
-    try:
-        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-    except:
-        pass  # Ignore if locale is not available
+import json
+import requests
 
 # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
 # do not change this unless explicitly requested by the user
@@ -260,20 +243,36 @@ SUBMITTAL:
         clean_system_prompt = clean_text(SYSTEM_PROMPT)
         clean_user_message = clean_text(user_message)
         
-        # Ensure proper encoding for the API call
-        messages = [
-            {"role": "system", "content": clean_system_prompt.encode('utf-8').decode('utf-8')},
-            {"role": "user", "content": clean_user_message.encode('utf-8').decode('utf-8')}
-        ]
+        # Manually make the API call with proper encoding
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json; charset=utf-8"
+        }
         
-        response = openai_client.chat.completions.create(
-            model="gpt-5",  # the newest OpenAI model is "gpt-5" which was released August 7, 2025
-            messages=messages,
-            temperature=0,  # Deterministic output as specified
-            max_tokens=4000
+        data = {
+            "model": "gpt-5",  # the newest OpenAI model is "gpt-5" which was released August 7, 2025
+            "messages": [
+                {"role": "system", "content": clean_system_prompt},
+                {"role": "user", "content": clean_user_message}
+            ],
+            "temperature": 0,
+            "max_tokens": 4000
+        }
+        
+        # Convert to JSON with ensure_ascii=False to preserve UTF-8
+        json_data = json.dumps(data, ensure_ascii=False).encode('utf-8')
+        
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            data=json_data
         )
         
-        result = response.choices[0].message.content
+        if response.status_code != 200:
+            raise Exception(f"OpenAI API error: {response.status_code} - {response.text}")
+        
+        result_json = response.json()
+        result = result_json['choices'][0]['message']['content']
         logging.info("Compliance analysis completed successfully")
         return result
         
