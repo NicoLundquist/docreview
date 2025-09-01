@@ -40,7 +40,8 @@ Preferred communication style: Simple, everyday language.
 ### AI Processing Pipeline
 - **OpenAI Integration**: GPT-5 API client for compliance analysis with temperature set to 0 for deterministic results
 - **System Prompt**: Comprehensive engineering-focused prompt for technical specification review
-- **Text Processing**: Multi-stage PDF text extraction with page markers and table detection
+- **Text Processing**: Multi-stage PDF text extraction with page markers, table detection, and OCR capabilities
+- **OCR Integration**: Tesseract OCR for extracting text from images within PDFs to ensure comprehensive content capture
 - **Analysis Framework**: Structured compliance evaluation with color-coded status markers (GREEN/YELLOW/RED/GRAY)
 
 ## External Dependencies
@@ -52,6 +53,8 @@ Preferred communication style: Simple, everyday language.
 ### Python Libraries
 - **Flask**: Web application framework with SQLAlchemy extension for database operations
 - **pdfplumber**: PDF text extraction and table detection library
+- **pytesseract**: Python wrapper for Tesseract OCR engine for optical character recognition
+- **Pillow**: Python Imaging Library for image processing and OCR support
 - **Werkzeug**: WSGI utilities including ProxyFix middleware and secure filename handling
 - **OpenAI**: Official Python client library for GPT API integration
 
@@ -63,5 +66,6 @@ Preferred communication style: Simple, everyday language.
 ### Infrastructure Requirements
 - **Database**: Configurable database backend (SQLite default, PostgreSQL production-ready)
 - **File System**: Local storage for PDF uploads with automatic directory creation
+- **OCR Engine**: Tesseract OCR system package for optical character recognition from PDF images
 - **Environment Variables**: DATABASE_URL, OPENAI_API_KEY, and SESSION_SECRET for configuration
 - **Proxy Support**: ProxyFix middleware for deployment behind reverse proxies
