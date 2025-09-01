@@ -1,6 +1,14 @@
 import os
 import logging
 from openai import OpenAI
+import locale
+
+# Set UTF-8 encoding for the environment
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+try:
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+except:
+    pass  # Ignore if locale is not available
 
 # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
 # do not change this unless explicitly requested by the user
@@ -217,12 +225,20 @@ SUBMITTAL:
     
     try:
         logging.info("Sending compliance analysis request to OpenAI...")
+        
+        # Clean the system prompt as well
+        clean_system_prompt = clean_text(SYSTEM_PROMPT)
+        clean_user_message = clean_text(user_message)
+        
+        # Ensure proper encoding for the API call
+        messages = [
+            {"role": "system", "content": clean_system_prompt.encode('utf-8').decode('utf-8')},
+            {"role": "user", "content": clean_user_message.encode('utf-8').decode('utf-8')}
+        ]
+        
         response = openai_client.chat.completions.create(
             model="gpt-5",  # the newest OpenAI model is "gpt-5" which was released August 7, 2025
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message}
-            ],
+            messages=messages,
             temperature=0,  # Deterministic output as specified
             max_tokens=4000
         )
