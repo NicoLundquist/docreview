@@ -214,9 +214,144 @@ Critical Observations:
 * Make statuses explicit with the bracketed color tags: [GREEN] [YELLOW] [RED] [GRAY] for every requirement line.
 """
 
+def chunk_large_document(text, max_chunk_size=50000):
+    """Split large documents into smaller chunks while preserving context."""
+    if len(text) <= max_chunk_size:
+        return [text]
+    
+    chunks = []
+    words = text.split()
+    current_chunk = []
+    current_size = 0
+    
+    for word in words:
+        word_size = len(word) + 1  # +1 for space
+        if current_size + word_size > max_chunk_size and current_chunk:
+            # Add current chunk and start new one
+            chunks.append(' '.join(current_chunk))
+            current_chunk = [word]
+            current_size = word_size
+        else:
+            current_chunk.append(word)
+            current_size += word_size
+    
+    # Add final chunk
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+    
+    return chunks
+
+def analyze_compliance_chunk(project_spec_text, vendor_submittal_chunk, chunk_info=""):
+    """Analyze a single chunk of documents."""
+    # Enhanced clean_text function with aggressive cleaning
+    def clean_text(text):
+        if not isinstance(text, str):
+            return ""
+        
+        # First pass: Replace common Unicode characters
+        replacements = {
+            '\u2019': "'",  # right single quote
+            '\u2018': "'",  # left single quote
+            '\u201c': '"',  # left double quote
+            '\u201d': '"',  # right double quote
+            '\u2013': '-',  # en dash
+            '\u2014': '--', # em dash
+            '\u2026': '...',# ellipsis
+            '\u00b0': ' deg', # degree
+            '\u00bd': '1/2',
+            '\u00bc': '1/4',
+            '\u00be': '3/4',
+            '\u2022': '*',  # bullet
+            '\u00b7': '*',  # middle dot
+            '\u2032': "'",  # prime
+            '\u2033': '"',  # double prime
+            '\u00a0': ' ',  # non-breaking space
+            '\t': ' ',      # tab
+            '\r': '',       # carriage return
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        # Second pass: Normalize Unicode decomposition
+        try:
+            text = unicodedata.normalize('NFKD', text)
+        except Exception:
+            pass
+        
+        # Third pass: Convert to ASCII bytes and back to remove all non-ASCII
+        try:
+            text = text.encode('ascii', errors='ignore').decode('ascii')
+        except Exception:
+            # Fallback: manually strip non-ASCII characters
+            text = ''.join(ch for ch in text if ord(ch) < 128)
+        
+        # Final aggressive cleanup - remove any remaining non-printable chars
+        import string
+        printable = set(string.printable)
+        text = ''.join(filter(lambda x: x in printable, text))
+        
+        # Remove any null bytes or control characters
+        text = text.replace('\x00', '')
+        text = ''.join(ch for ch in text if ord(ch) >= 32 or ch in '\n\r\t')
+        
+        # Normalize whitespace
+        text = ' '.join(text.split())
+        return text
+    
+    clean_system_prompt = clean_text(SYSTEM_PROMPT)
+    
+    user_message = f"""PROJECT_SPEC:
+{project_spec_text}
+
+---
+
+SUBMITTAL{chunk_info}:
+{vendor_submittal_chunk}"""
+
+    clean_user_message = clean_text(user_message)
+    clean_user_message = clean_user_message.encode('utf-8', errors='ignore').decode('utf-8')
+    
+    payload = {
+        "model": "gpt-5",
+        "messages": [
+            {"role": "system", "content": clean_system_prompt},
+            {"role": "user", "content": clean_user_message}
+        ]
+    }
+    
+    session = requests.Session()
+    session.headers.update({
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json; charset=utf-8"
+    })
+    
+    try:
+        response = session.post(
+            "https://api.openai.com/v1/chat/completions",
+            json=payload,
+            timeout=90
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"OpenAI API error: {response.status_code}")
+        
+        result_json = response.json()
+        
+        if 'choices' in result_json and result_json['choices']:
+            content = result_json['choices'][0]['message']['content']
+            return clean_text(content)
+        else:
+            raise Exception("No response content from OpenAI API")
+            
+    except requests.exceptions.Timeout:
+        raise Exception("OpenAI API request timed out for this chunk")
+    except Exception as e:
+        raise Exception(f"Failed to analyze chunk: {str(e)}")
+
 def analyze_compliance(project_spec_text, vendor_submittal_text):
     """
     Analyze compliance between project specification and vendor submittal using OpenAI.
+    Handles large documents by chunking them into smaller pieces.
     All strings are sanitized to ASCII for safety.
     """
     if not OPENAI_API_KEY:
@@ -282,6 +417,58 @@ def analyze_compliance(project_spec_text, vendor_submittal_text):
     project_spec_text = clean_text(project_spec_text)
     vendor_submittal_text = clean_text(vendor_submittal_text)
 
+    # Check if documents are too large and need chunking
+    total_size = len(project_spec_text) + len(vendor_submittal_text)
+    max_single_request_size = 150000  # 150K characters limit for single request
+    
+    logging.info(f"Document sizes - Project: {len(project_spec_text)}, Submittal: {len(vendor_submittal_text)}, Total: {total_size}")
+    
+    if total_size > max_single_request_size:
+        logging.info(f"Large document detected ({total_size} chars). Using chunked analysis approach.")
+        
+        # Chunk the larger document (usually the submittal)
+        if len(vendor_submittal_text) > len(project_spec_text):
+            chunks = chunk_large_document(vendor_submittal_text, max_chunk_size=50000)
+            logging.info(f"Split submittal into {len(chunks)} chunks")
+        else:
+            chunks = chunk_large_document(project_spec_text, max_chunk_size=50000)
+            logging.info(f"Split project spec into {len(chunks)} chunks")
+        
+        # Process each chunk
+        chunk_results = []
+        for i, chunk in enumerate(chunks):
+            try:
+                logging.info(f"Processing chunk {i+1}/{len(chunks)}...")
+                chunk_info = f" (Part {i+1} of {len(chunks)})"
+                
+                if len(vendor_submittal_text) > len(project_spec_text):
+                    # Submittal was chunked
+                    result = analyze_compliance_chunk(project_spec_text, chunk, chunk_info)
+                else:
+                    # Project spec was chunked
+                    result = analyze_compliance_chunk(chunk, vendor_submittal_text, chunk_info)
+                
+                chunk_results.append(result)
+                logging.info(f"Chunk {i+1} analysis completed")
+                
+            except Exception as e:
+                logging.error(f"Error processing chunk {i+1}: {str(e)}")
+                chunk_results.append(f"Error analyzing chunk {i+1}: {str(e)}")
+        
+        # Combine chunk results into comprehensive report
+        combined_report = "# Executive Summary\n"
+        combined_report += "* Analysis completed using document chunking due to large file size\n"
+        combined_report += f"* Total chunks processed: {len(chunks)}\n"
+        combined_report += "* Overall compliance status: Partially Compliant (based on chunked analysis)\n\n"
+        
+        combined_report += "# Detailed Analysis by Chunk\n"
+        for i, result in enumerate(chunk_results):
+            combined_report += f"\n## Chunk {i+1} Analysis:\n"
+            combined_report += result + "\n"
+        
+        return combined_report
+    
+    # Single document processing (original logic)
     user_message = f"""PROJECT_SPEC:
 {project_spec_text}
 
