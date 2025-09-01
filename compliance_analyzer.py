@@ -187,7 +187,26 @@ def analyze_compliance(project_spec_text, vendor_submittal_text):
     if not openai_client:
         raise ValueError("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.")
     
-    # Prepare the user message with both documents
+    # Prepare the user message with both documents, ensuring proper encoding
+    # Clean up any problematic characters
+    def clean_text(text):
+        # Ensure text is properly encoded as UTF-8
+        if isinstance(text, str):
+            # Replace common problematic characters
+            text = text.replace('\u2019', "'")  # Replace right single quotation mark
+            text = text.replace('\u2018', "'")  # Replace left single quotation mark
+            text = text.replace('\u201c', '"')  # Replace left double quotation mark
+            text = text.replace('\u201d', '"')  # Replace right double quotation mark
+            text = text.replace('\u2013', '-')  # Replace en dash
+            text = text.replace('\u2014', '--') # Replace em dash
+            text = text.replace('\u2026', '...')  # Replace ellipsis
+            # Ensure the text is valid UTF-8
+            text = text.encode('utf-8', errors='replace').decode('utf-8')
+        return text
+    
+    project_spec_text = clean_text(project_spec_text)
+    vendor_submittal_text = clean_text(vendor_submittal_text)
+    
     user_message = f"""PROJECT_SPEC:
 {project_spec_text}
 
