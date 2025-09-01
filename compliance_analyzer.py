@@ -58,51 +58,10 @@ except Exception:
 import requests
 requests.models.Response.encoding = 'utf-8'
 
-# Debug: Check environment variables for Unicode
-logging.info("DEBUG: Checking environment for Unicode...")
-for key in ['OPENAI_API_KEY', 'HTTP_PROXY', 'HTTPS_PROXY', 'LANG', 'LC_ALL']:
-    value = os.environ.get(key, '')
-    if value:
-        for i, char in enumerate(value):
-            if ord(char) > 127:
-                logging.error(f"Environment variable {key} has Unicode at position {i}: {char!r}")
-
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-if OPENAI_API_KEY:
-    # Debug: Check API key for Unicode characters
-    logging.info("DEBUG: Checking API key for Unicode characters...")
-    unicode_found = False
-    for i, char in enumerate(OPENAI_API_KEY):
-        if ord(char) > 127:
-            logging.error(f"API Key has Unicode at position {i}: {char!r} (U+{ord(char):04X})")
-            unicode_found = True
-    
-    if unicode_found:
-        logging.warning("Unicode characters found in API key - cleaning...")
-    
-    # Clean the API key to ensure ASCII-only
-    original_length = len(OPENAI_API_KEY)
-    OPENAI_API_KEY = OPENAI_API_KEY.encode('ascii', errors='ignore').decode('ascii').strip()
-    
-    if len(OPENAI_API_KEY) != original_length:
-        logging.warning(f"API key length changed from {original_length} to {len(OPENAI_API_KEY)} after cleaning")
-    
-    logging.info(f"API key cleaned and verified ASCII-only. Length: {len(OPENAI_API_KEY)}")
-    
-    # Debug: Show first and last 50 characters to identify what's actually stored
-    logging.info(f"DEBUG: First 100 chars of API key: {OPENAI_API_KEY[:100]!r}")
-    logging.info(f"DEBUG: Last 100 chars of API key: {OPENAI_API_KEY[-100:]!r}")
-    
-    # Check if this looks like a real API key (should start with sk-)
-    if not OPENAI_API_KEY.startswith('sk-'):
-        logging.error(f"API key doesn't start with 'sk-' - it starts with: {OPENAI_API_KEY[:20]!r}")
-        logging.error("This suggests the OPENAI_API_KEY environment variable contains wrong content!")
-    
-    if not OPENAI_API_KEY:
-        logging.error("API key became empty after ASCII cleaning!")
-else:
-    logging.error("OPENAI_API_KEY not found in environment variables")
+if not OPENAI_API_KEY:
+    logging.warning("OPENAI_API_KEY not found in environment variables")
 
 # ASCII-only system prompt (no smart quotes, no em dashes, no special symbols)
 SYSTEM_PROMPT = """You are ChatGPT (GPT-5) acting as a professional engineer conducting a technical review of product specifications for compliance with project requirements. Your job is single-purpose:
