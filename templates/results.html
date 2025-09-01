@@ -77,7 +77,7 @@
                                 <i class="fas fa-file-alt me-2"></i>Detailed Analysis Report
                             </h5>
                             <div class="report-content">
-                                {{ review.report_content | safe | nl2br }}
+                                {{ review.report_content | replace('\n', '<br>') | safe }}
                             </div>
                         </div>
                     </div>
