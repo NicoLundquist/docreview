@@ -418,9 +418,15 @@ SUBMITTAL:
                 "https://api.openai.com/v1/chat/completions",
                 data=json_payload,  # Pass the JSON string directly, let requests encode it
                 headers={"Content-Type": "application/json; charset=utf-8"},
-                timeout=240  # 4 minutes - prevent hanging while allowing GPT-5 processing
+                timeout=90  # 90 seconds - prevent worker timeout
             )
             logging.info(f"STEP 7 - HTTP request completed. Status: {response.status_code}")
+        except requests.exceptions.Timeout as timeout_error:
+            logging.error(f"STEP 7 - Request timeout after 90 seconds: {timeout_error}")
+            raise Exception("OpenAI API request timed out. Please try again with smaller documents or try again later.")
+        except requests.exceptions.ConnectionError as conn_error:
+            logging.error(f"STEP 7 - Connection error: {conn_error}")
+            raise Exception("Unable to connect to OpenAI API. Please check your internet connection and try again.")
         except Exception as http_error:
             logging.error(f"STEP 7 - HTTP request failed: {http_error}")
             # Try alternative approach with json parameter
@@ -429,12 +435,15 @@ SUBMITTAL:
                 response = session.post(
                     "https://api.openai.com/v1/chat/completions",
                     json=payload,  # Let requests handle JSON encoding completely
-                    timeout=240  # 4 minutes - prevent hanging while allowing GPT-5 processing
+                    timeout=90  # 90 seconds - prevent worker timeout
                 )
                 logging.info(f"STEP 7 - Alternative approach succeeded. Status: {response.status_code}")
+            except requests.exceptions.Timeout as alt_timeout:
+                logging.error(f"STEP 7 - Alternative approach timeout: {alt_timeout}")
+                raise Exception("OpenAI API request timed out. Please try again with smaller documents or try again later.")
             except Exception as alt_error:
                 logging.error(f"STEP 7 - Alternative approach also failed: {alt_error}")
-                raise
+                raise Exception(f"Failed to connect to OpenAI API: {str(alt_error)}")
 
         if response.status_code != 200:
             # Avoid logging raw response.text if your sink is not UTF-8
