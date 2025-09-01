@@ -80,8 +80,44 @@ def upload_files():
             # Perform compliance analysis
             analysis_result = analyze_compliance(project_spec_text, vendor_submittal_text)
             
+            # Clean the AI response output to remove any remaining Unicode characters
+            def clean_ai_output(text):
+                if not text:
+                    return ""
+                
+                # Replace common Unicode characters that might slip through
+                replacements = {
+                    '\u2011': '-',  # non-breaking hyphen
+                    '\u2013': '-',  # en dash
+                    '\u2014': '--', # em dash
+                    '\u2019': "'",  # right single quote
+                    '\u2018': "'",  # left single quote
+                    '\u201c': '"',  # left double quote
+                    '\u201d': '"',  # right double quote
+                    '\u2026': '...',# ellipsis
+                    '\u00b0': ' deg', # degree
+                    '\u00a0': ' ',  # non-breaking space
+                    '\u2032': "'",  # prime
+                    '\u2033': '"',  # double prime
+                }
+                
+                for old, new in replacements.items():
+                    text = text.replace(old, new)
+                
+                # Convert to ASCII, ignoring any remaining problematic characters
+                try:
+                    text = text.encode('ascii', errors='ignore').decode('ascii')
+                except:
+                    # Fallback: manually strip non-ASCII characters
+                    text = ''.join(ch for ch in text if ord(ch) < 128)
+                
+                return text
+            
+            # Clean the analysis result before saving
+            cleaned_analysis_result = clean_ai_output(analysis_result)
+            
             # Update database record with results
-            review.report_content = analysis_result
+            review.report_content = cleaned_analysis_result
             review.status = 'completed'
             
             # Debug: Show what we're saving to database
@@ -89,12 +125,13 @@ def upload_files():
             logging.info("SAVING TO DATABASE:")
             logging.info(f"Review ID: {review.id}")
             logging.info(f"Status: {review.status}")
-            logging.info(f"Report content length: {len(analysis_result) if analysis_result else 0}")
-            logging.info(f"Report content first 500 chars: {analysis_result[:500] if analysis_result else 'None'}")
+            logging.info(f"Original report length: {len(analysis_result) if analysis_result else 0}")
+            logging.info(f"Cleaned report length: {len(cleaned_analysis_result) if cleaned_analysis_result else 0}")
+            logging.info(f"Report content first 500 chars: {cleaned_analysis_result[:500] if cleaned_analysis_result else 'None'}")
             logging.info("=" * 80)
             
             # Try to extract summary data (basic parsing)
-            lines = analysis_result.split('\n') if analysis_result else []
+            lines = cleaned_analysis_result.split('\n') if cleaned_analysis_result else []
             for line in lines:
                 if 'Overall compliance status' in line:
                     review.overall_status = line.split(':')[-1].strip().strip('*[]')
@@ -125,6 +162,8 @@ def upload_files():
             
         except Exception as e:
             logging.error(f"Error during analysis: {str(e)}")
+            # Rollback the transaction to clear any previous errors
+            db.session.rollback()
             review.status = 'error'
             review.error_message = str(e)
             db.session.commit()
