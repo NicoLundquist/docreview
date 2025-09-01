@@ -4,6 +4,7 @@ import pytesseract
 from PIL import Image
 import io
 import re
+import unicodedata
 
 # Disable debug logging for PDF libraries
 logging.getLogger('pdfminer').setLevel(logging.WARNING)
@@ -15,6 +16,9 @@ def clean_text_for_api(text):
     """
     if not text:
         return ""
+    
+    # First normalize Unicode to decomposed form
+    text = unicodedata.normalize('NFKD', text)
     
     # Replace common Unicode characters with ASCII equivalents
     replacements = {
@@ -42,13 +46,16 @@ def clean_text_for_api(text):
         '\u00a9': '(c)',  # Copyright
         '\u00ae': '(R)',  # Registered
         '\u2122': '(TM)',  # Trademark
+        '\u00a0': ' ',  # Non-breaking space
+        '\t': ' ',  # Tab
+        '\r': '',  # Carriage return
     }
     
     for unicode_char, ascii_char in replacements.items():
         text = text.replace(unicode_char, ascii_char)
     
-    # Remove any remaining non-ASCII characters
-    text = ''.join(char if ord(char) < 128 else ' ' for char in text)
+    # Remove any remaining non-ASCII characters - be aggressive
+    text = ''.join(char for char in text if ord(char) < 128)
     
     # Clean up excessive whitespace
     text = re.sub(r'\s+', ' ', text)

@@ -4,6 +4,20 @@ import logging
 from openai import OpenAI
 import json
 import requests
+import unicodedata
+
+# Force UTF-8 encoding everywhere
+if sys.version_info[0] >= 3:
+    try:
+        import locale
+        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    except:
+        pass
+
+# Set default encoding for requests
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+os.environ['LANG'] = 'en_US.UTF-8'
+os.environ['LC_ALL'] = 'en_US.UTF-8'
 
 # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
 # do not change this unless explicitly requested by the user
@@ -190,39 +204,45 @@ def analyze_compliance(project_spec_text, vendor_submittal_text):
     if not OPENAI_API_KEY:
         raise ValueError("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.")
     
-    # Prepare the user message with both documents, ensuring proper encoding
-    # Clean up any problematic characters and make everything ASCII-safe
+    # Normalize and clean text to pure ASCII
     def clean_text(text):
-        # Ensure text is properly encoded
-        if isinstance(text, str):
-            # Replace all common Unicode characters with ASCII equivalents
-            replacements = {
-                '\u2019': "'",  # Right single quotation mark
-                '\u2018': "'",  # Left single quotation mark
-                '\u201c': '"',  # Left double quotation mark
-                '\u201d': '"',  # Right double quotation mark
-                '\u2013': '-',  # En dash
-                '\u2014': '--', # Em dash
-                '\u2026': '...',  # Ellipsis
-                '\u00b0': ' degrees',  # Degree symbol
-                '\u00bd': '1/2',  # Half symbol
-                '\u00bc': '1/4',  # Quarter symbol
-                '\u00be': '3/4',  # Three quarters
-                '\u2022': '*',  # Bullet point
-                '\u2265': '>=',  # Greater than or equal
-                '\u2264': '<=',  # Less than or equal
-                '\u00d7': 'x',  # Multiplication sign
-                '\u00f7': '/',  # Division sign
-                '\u03bc': 'u',  # Micro sign (mu)
-                '\u00b1': '+/-',  # Plus-minus sign
-            }
-            
-            for unicode_char, ascii_char in replacements.items():
-                text = text.replace(unicode_char, ascii_char)
-            
-            # Remove any remaining non-ASCII characters
-            text = text.encode('ascii', errors='ignore').decode('ascii')
-            
+        if not isinstance(text, str):
+            return ""
+        
+        # First normalize Unicode to decomposed form
+        text = unicodedata.normalize('NFKD', text)
+        
+        # Replace smart quotes and special characters
+        replacements = {
+            '\u2019': "'",  # Right single quotation mark
+            '\u2018': "'",  # Left single quotation mark  
+            '\u201c': '"',  # Left double quotation mark
+            '\u201d': '"',  # Right double quotation mark
+            '\u2013': '-',  # En dash
+            '\u2014': '--', # Em dash
+            '\u2026': '...',  # Ellipsis
+            '\u00b0': ' deg',  # Degree symbol
+            '\u00bd': '1/2',  # Half
+            '\u00bc': '1/4',  # Quarter
+            '\u00be': '3/4',  # Three quarters
+            '\u2022': '*',  # Bullet
+            '\u00b7': '*',  # Middle dot
+            '\u2032': "'",  # Prime
+            '\u2033': '"',  # Double prime
+            '\u00a0': ' ',  # Non-breaking space
+            '\t': ' ',  # Tab
+            '\r': '',  # Carriage return
+        }
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        # Remove all non-ASCII characters completely
+        text = ''.join(char for char in text if ord(char) < 128)
+        
+        # Clean up whitespace
+        text = ' '.join(text.split())
+        
         return text
     
     project_spec_text = clean_text(project_spec_text)
@@ -243,10 +263,12 @@ SUBMITTAL:
         clean_system_prompt = clean_text(SYSTEM_PROMPT)
         clean_user_message = clean_text(user_message)
         
-        # Use the requests library with json parameter for proper encoding
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}"
-        }
+        # Create session with explicit UTF-8 encoding
+        session = requests.Session()
+        session.headers.update({
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json; charset=utf-8"
+        })
         
         data = {
             "model": "gpt-5",  # the newest OpenAI model is "gpt-5" which was released August 7, 2025
@@ -258,11 +280,12 @@ SUBMITTAL:
             "max_tokens": 8000  # Increased for larger documents
         }
         
-        # Use json parameter which handles encoding properly
-        response = requests.post(
+        # Manually encode as UTF-8 JSON
+        json_str = json.dumps(data, ensure_ascii=True)  # Force ASCII for safety
+        
+        response = session.post(
             "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=data  # This will automatically handle UTF-8 encoding
+            data=json_str.encode('utf-8')
         )
         
         if response.status_code != 200:
