@@ -329,7 +329,7 @@ SUBMITTAL{chunk_info}:
         response = session.post(
             "https://api.openai.com/v1/chat/completions",
             json=payload,
-            timeout=90
+            timeout=300
         )
         
         if response.status_code != 200:
