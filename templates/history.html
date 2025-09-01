@@ -46,11 +46,14 @@
                                     <td>
                                         {% if review.status == 'completed' %}
                                             {% if review.overall_status %}
-                                                <span class="badge bg-{{ 'success' if review.overall_status == 'Compliant' else 'warning' if 'Partially' in review.overall_status else 'danger' if review.overall_status == 'Non-Compliant' else 'secondary' }}">
+                                                <span class="badge bg-{{ 'success' if review.overall_status == 'Compliant' else 'warning text-dark' if 'Partially' in review.overall_status else 'danger' if review.overall_status == 'Non-Compliant' else 'secondary' }}">
+                                                    <i class="fas fa-{{ 'check-circle' if review.overall_status == 'Compliant' else 'exclamation-triangle' if 'Partially' in review.overall_status else 'times-circle' if review.overall_status == 'Non-Compliant' else 'question-circle' }} me-1"></i>
                                                     {{ review.overall_status }}
                                                 </span>
                                             {% else %}
-                                                <span class="badge bg-success">Completed</span>
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check me-1"></i>Completed
+                                                </span>
                                             {% endif %}
                                         {% elif review.status == 'error' %}
                                             <span class="badge bg-danger">Error</span>

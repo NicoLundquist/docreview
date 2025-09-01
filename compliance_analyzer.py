@@ -133,6 +133,12 @@ Choose one status per model:
 * Number of models reviewed: [N]
 * Number of compliant models identified: [N]
 
+IMPORTANT: For overall compliance status determination:
+- Use "Compliant" if AT LEAST ONE model meets or exceeds ALL project requirements
+- Use "Partially Compliant" if some models meet some requirements but NO model is fully compliant
+- Use "Non-Compliant" if NO models meet the critical requirements
+- Use "Insufficient Data" if data is too incomplete to make any determination
+
 # Detailed Analysis by Model Number
 ## Model: [MODEL NUMBER EXACTLY AS IN SUBMITTAL]
 Compliance Status: [Compliant / Partially Compliant / Non-Compliant / Insufficient Data]
