@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Documents - Engineering Compliance Review{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-lg">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="fas fa-upload me-2"></i>
+                    Document Upload for Compliance Review
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Instructions:</strong> Upload two PDF documents for compliance analysis:
+                            <ol class="mb-0 mt-2">
+                                <li><strong>Project Specification</strong> - The baseline requirements document</li>
+                                <li><strong>Vendor Submittal</strong> - The vendor's product specification sheet(s)</li>
+                            </ol>
+                            <small class="text-muted d-block mt-2">Maximum file size: 50MB per file. Only PDF format accepted.</small>
+                        </div>
+                    </div>
+                </div>
+
+                <form action="{{ url_for('upload_files') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="upload-section">
+                                <h5 class="text-primary">
+                                    <i class="fas fa-file-contract me-2"></i>
+                                    Project Specification
+                                </h5>
+                                <div class="upload-area" id="projectSpecArea">
+                                    <input type="file" id="project_spec" name="project_spec" accept=".pdf" required class="file-input">
+                                    <div class="upload-content">
+                                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                                        <p class="upload-text">Click to browse or drag & drop PDF file</p>
+                                        <small class="text-muted">Project requirements and specifications</small>
+                                    </div>
+                                </div>
+                                <div id="projectSpecInfo" class="file-info"></div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="upload-section">
+                                <h5 class="text-success">
+                                    <i class="fas fa-file-pdf me-2"></i>
+                                    Vendor Submittal
+                                </h5>
+                                <div class="upload-area" id="vendorSubmittalArea">
+                                    <input type="file" id="vendor_submittal" name="vendor_submittal" accept=".pdf" required class="file-input">
+                                    <div class="upload-content">
+                                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                                        <p class="upload-text">Click to browse or drag & drop PDF file</p>
+                                        <small class="text-muted">Vendor product specifications</small>
+                                    </div>
+                                </div>
+                                <div id="vendorSubmittalInfo" class="file-info"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-12 text-center">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
+                                <i class="fas fa-cogs me-2"></i>
+                                Start Compliance Analysis
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="row mt-5">
+                    <div class="col-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-lightbulb me-2"></i>
+                                    What happens next?
+                                </h6>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="text-center">
+                                            <i class="fas fa-file-medical-alt fa-2x text-primary mb-2"></i>
+                                            <h6>Document Processing</h6>
+                                            <small class="text-muted">Text extraction and validation from uploaded PDFs</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center">
+                                            <i class="fas fa-robot fa-2x text-success mb-2"></i>
+                                            <h6>AI Analysis</h6>
+                                            <small class="text-muted">Professional engineering review using advanced AI</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center">
+                                            <i class="fas fa-clipboard-check fa-2x text-warning mb-2"></i>
+                                            <h6>Compliance Report</h6>
+                                            <small class="text-muted">Detailed analysis with color-coded compliance status</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5>Processing Documents...</h5>
+                <p class="text-muted mb-0">This may take a few minutes. Please do not close this window.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function() {
+    const modal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    modal.show();
+});
+</script>
+{% endblock %}

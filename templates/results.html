@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Compliance Analysis Results - Engineering Review{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-lg">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-clipboard-check me-2"></i>
+                    Compliance Analysis Results
+                </h4>
+                <div>
+                    <a href="{{ url_for('download_report', review_id=review.id) }}" class="btn btn-light btn-sm">
+                        <i class="fas fa-download me-1"></i>Download Report
+                    </a>
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm ms-2">
+                        <i class="fas fa-plus me-1"></i>New Analysis
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Document Information -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="info-box">
+                            <h6 class="text-primary">
+                                <i class="fas fa-file-contract me-2"></i>Project Specification
+                            </h6>
+                            <p class="mb-0">{{ review.project_spec_filename }}</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-box">
+                            <h6 class="text-success">
+                                <i class="fas fa-file-pdf me-2"></i>Vendor Submittal
+                            </h6>
+                            <p class="mb-0">{{ review.submittal_filename }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Statistics -->
+                {% if review.overall_status %}
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="alert alert-{{ 'success' if review.overall_status == 'Compliant' else 'warning' if 'Partially' in review.overall_status else 'danger' if review.overall_status == 'Non-Compliant' else 'info' }}">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-{{ 'check-circle' if review.overall_status == 'Compliant' else 'exclamation-triangle' if 'Partially' in review.overall_status else 'times-circle' if review.overall_status == 'Non-Compliant' else 'question-circle' }} me-2"></i>
+                                        Overall Status: {{ review.overall_status }}
+                                    </h6>
+                                </div>
+                                {% if review.models_reviewed %}
+                                <div class="col-md-4">
+                                    <small><strong>Models Reviewed:</strong> {{ review.models_reviewed }}</small>
+                                </div>
+                                {% endif %}
+                                {% if review.compliant_models is not none %}
+                                <div class="col-md-4">
+                                    <small><strong>Compliant Models:</strong> {{ review.compliant_models }}</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Analysis Report -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="report-container">
+                            <h5 class="text-dark mb-3">
+                                <i class="fas fa-file-alt me-2"></i>Detailed Analysis Report
+                            </h5>
+                            <div class="report-content">
+                                {{ review.report_content | safe | nl2br }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metadata -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-info-circle me-2"></i>Analysis Information
+                                </h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <strong>Analysis Date:</strong> {{ review.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                        </small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <strong>Report ID:</strong> {{ review.id }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Legend Modal -->
+<div class="modal fade" id="legendModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Compliance Status Legend</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-6">
+                        <span class="badge bg-success mb-2">GREEN</span>
+                        <p class="small">Meets or exceeds requirements</p>
+                    </div>
+                    <div class="col-6">
+                        <span class="badge bg-warning mb-2">YELLOW</span>
+                        <p class="small">Marginal or conditional compliance</p>
+                    </div>
+                    <div class="col-6">
+                        <span class="badge bg-danger mb-2">RED</span>
+                        <p class="small">Does not meet requirements</p>
+                    </div>
+                    <div class="col-6">
+                        <span class="badge bg-secondary mb-2">GRAY</span>
+                        <p class="small">Insufficient data for determination</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Format the report content with proper styling
+document.addEventListener('DOMContentLoaded', function() {
+    const reportContent = document.querySelector('.report-content');
+    if (reportContent) {
+        let html = reportContent.innerHTML;
+        
+        // Style compliance markers
+        html = html.replace(/\[GREEN\]/g, '<span class="badge bg-success">GREEN</span>');
+        html = html.replace(/\[YELLOW\]/g, '<span class="badge bg-warning">YELLOW</span>');
+        html = html.replace(/\[RED\]/g, '<span class="badge bg-danger">RED</span>');
+        html = html.replace(/\[GRAY\]/g, '<span class="badge bg-secondary">GRAY</span>');
+        
+        // Style headers
+        html = html.replace(/^# (.+)$/gm, '<h3 class="text-primary mt-4 mb-3">$1</h3>');
+        html = html.replace(/^## (.+)$/gm, '<h4 class="text-secondary mt-3 mb-2">$1</h4>');
+        html = html.replace(/^### (.+)$/gm, '<h5 class="text-dark mt-2 mb-2">$1</h5>');
+        
+        // Style bullet points
+        html = html.replace(/^\* (.+)$/gm, '<li class="mb-1">$1</li>');
+        
+        // Wrap consecutive list items in ul tags
+        html = html.replace(/(<li class="mb-1">.*<\/li>)\s*(?=<li class="mb-1">)/gs, '$1');
+        html = html.replace(/(<li class="mb-1">.*<\/li>)/gs, '<ul>$1</ul>');
+        
+        reportContent.innerHTML = html;
+    }
+});
+
+// Add legend button
+const header = document.querySelector('.card-header .btn-light').parentNode;
+const legendBtn = document.createElement('a');
+legendBtn.className = 'btn btn-outline-light btn-sm ms-2';
+legendBtn.setAttribute('data-bs-toggle', 'modal');
+legendBtn.setAttribute('data-bs-target', '#legendModal');
+legendBtn.innerHTML = '<i class="fas fa-question-circle me-1"></i>Legend';
+header.appendChild(legendBtn);
+</script>
+{% endblock %}
