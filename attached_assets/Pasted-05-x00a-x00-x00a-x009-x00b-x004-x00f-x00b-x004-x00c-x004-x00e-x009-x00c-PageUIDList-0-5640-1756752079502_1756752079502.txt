@@ -1,0 +1,88 @@
+05\x00a\x00-\x00a\x009\x00b\x004\x00f\x00b\x004\x00c\x004\x00e\x009\x00c', 'PageUIDList': {'0': 5640}, 'PageWidthList': {'0': 612}}}, 'Resources': {'ColorSpace': {'CS0': <PDFObjRef:536>}, 'ExtGState': {'GS0': <PDFObjRef:544>, 'GS1': <PDFObjRef:546>, 'GS2': <PDFObjRef:578>, 'GS3': <PDFObjRef:577>}, 'Font': {'T1_0': <PDFObjRef:573>, 'T1_1': <PDFObjRef:568>, 'T1_2': <PDFObjRef:526>, 'T1_3': <PDFObjRef:564>, 'T1_4': <PDFObjRef:559>, 'T1_5': <PDFObjRef:554>}, 'ProcSet': [/'PDF', /'Text'], 'Properties': {'MC0': <PDFObjRef:552>}, 'Shading': {'Sh0': <PDFObjRef:550>, 'Sh1': <PDFObjRef:548>}, 'XObject': {'Fm0': <PDFObjRef:547>, 'Fm1': <PDFObjRef:531>, 'Fm2': <PDFObjRef:522>}}, 'Rotate': 0, 'TrimBox': [0, 0, 612, 792], 'Type': /'Page'}
+DEBUG:pdfminer.pdfdocument:getobj: objid=580
+[2025-09-01 18:40:50 +0000] [4454] [ERROR] Error handling request /upload
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/sync.py", line 177, in handle_request
+    respiter = self.wsgi(environ, resp.start_response)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1536, in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/werkzeug/middleware/proxy_fix.py", line 183, in __call__
+    return self.app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/routes.py", line 68, in upload_files
+    vendor_submittal_text = extract_text_from_pdf(vendor_submittal_path)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/pdf_processor.py", line 37, in extract_text_from_pdf
+    page_text = page.extract_text()
+                ^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfplumber/page.py", line 530, in extract_text
+    return self.get_textmap(**tuplify_list_kwargs(kwargs)).as_string
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfplumber/page.py", line 507, in _get_textmap
+    return utils.chars_to_textmap(self.chars, **full_kwargs)
+                                  ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfplumber/container.py", line 52, in chars
+    return self.objects.get("char", [])
+           ^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfplumber/page.py", line 346, in objects
+    self._objects: Dict[str, T_obj_list] = self.parse_objects()
+                                           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfplumber/page.py", line 443, in parse_objects
+    for obj in self.iter_layout_objects(self.layout._objs):
+                                        ^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfplumber/page.py", line 266, in layout
+    interpreter.process_page(self.page_obj)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/pdfinterp.py", line 1210, in process_page
+    self.render_contents(page.resources, page.contents, ctm=ctm)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/pdfinterp.py", line 1231, in render_contents
+    self.execute(list_value(streams))
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/pdfinterp.py", line 1257, in execute
+    func(*args)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/pdfinterp.py", line 1118, in do_TJ
+    self.device.render_string(
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/pdfdevice.py", line 137, in render_string
+    textstate.linematrix = self.render_string_horizontal(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/pdfdevice.py", line 177, in render_string_horizontal
+    x += self.render_char(
+         ^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfplumber/page.py", line 146, in render_char
+    adv = super().render_char(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/converter.py", line 247, in render_char
+    text = font.to_unichr(cid)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/pdffont.py", line 1219, in to_unichr
+    return self.unicode_map.get_unichr(cid)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/pdfminer/cmapdb.py", line 153, in get_unichr
+    log.debug("get_unichr: %r, %r", self, cid)
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/logging/__init__.py", line 1477, in debug
+    self._log(DEBUG, msg, args, **kwargs)
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/logging/__init__.py", line 1632, in _log
+    record = self.makeRecord(self.name, level, fn, lno, msg, args,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/logging/__init__.py", line 1601, in makeRecord
+    rv = _logRecordFactory(name, level, fn, lno, msg, args, exc_info, func,
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/logging/__init__.py", line 359, in __init__
+    if logProcesses and hasattr(os, 'getpid'):
+                        ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-09-01 18:40:50 +0000] [4454] [INFO] Worker exiting (pid: 4454)
+[2025-09-01 18:40:51 +0000] [4513] [INFO] Booting worker with pid: 4513

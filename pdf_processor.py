@@ -4,6 +4,12 @@ import pytesseract
 from PIL import Image
 import io
 
+# Disable debug logging for pdfminer to prevent issues
+import pdfminer
+import pdfplumber.utils
+logging.getLogger('pdfminer').setLevel(logging.WARNING)
+logging.getLogger('pdfplumber').setLevel(logging.WARNING)
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
     Extract text content from a PDF file using pdfplumber
@@ -34,9 +40,25 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                     # Extract text from the page with error handling
                     page_text = ""
                     try:
-                        page_text = page.extract_text()
-                        if page_text:
-                            extracted_text += page_text
+                        # Try primary text extraction with timeout
+                        import signal
+                        
+                        def timeout_handler(signum, frame):
+                            raise TimeoutError("Text extraction timed out")
+                        
+                        signal.signal(signal.SIGALRM, timeout_handler)
+                        signal.alarm(10)  # 10 second timeout for text extraction
+                        
+                        try:
+                            page_text = page.extract_text()
+                            if page_text:
+                                extracted_text += page_text
+                        finally:
+                            signal.alarm(0)
+                            
+                    except (TimeoutError, SystemExit) as timeout_error:
+                        logging.warning(f"Text extraction timed out for page {page_num}")
+                        extracted_text += f"\n[TEXT EXTRACTION TIMED OUT FOR PAGE {page_num}]\n"
                     except Exception as text_error:
                         logging.warning(f"Text extraction failed for page {page_num}: {str(text_error)}")
                         # Try alternative text extraction method
