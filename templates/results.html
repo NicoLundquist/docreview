@@ -76,7 +76,7 @@
                             <h5 class="text-dark mb-3">
                                 <i class="fas fa-file-alt me-2"></i>Detailed Analysis Report
                             </h5>
-                            <div class="report-content">
+                            <div class="report-content" id="reportContent">
                                 {{ review.report_content | replace('\n', '<br>') | safe }}
                             </div>
                         </div>
@@ -147,35 +147,49 @@
 
 {% block scripts %}
 <script>
-// Format the report content with proper styling
+// Format the report content with professional styling
 document.addEventListener('DOMContentLoaded', function() {
-    const reportContent = document.querySelector('.report-content');
+    const reportContent = document.querySelector('#reportContent');
     if (reportContent) {
         let html = reportContent.innerHTML;
         
         // Style compliance markers - handle full format like [GREEN: MEETS]
-        html = html.replace(/\[GREEN:([^\]]+)\]/g, '<span class="badge bg-success">GREEN:$1</span>');
-        html = html.replace(/\[YELLOW:([^\]]+)\]/g, '<span class="badge bg-warning text-dark">YELLOW:$1</span>');
-        html = html.replace(/\[RED:([^\]]+)\]/g, '<span class="badge bg-danger">RED:$1</span>');
-        html = html.replace(/\[GRAY:([^\]]+)\]/g, '<span class="badge bg-secondary">GRAY:$1</span>');
+        html = html.replace(/\[GREEN:([^\]]+)\]/g, '<span class="compliance-badge compliance-green"><i class="fas fa-check-circle me-1"></i>GREEN:$1</span>');
+        html = html.replace(/\[YELLOW:([^\]]+)\]/g, '<span class="compliance-badge compliance-yellow"><i class="fas fa-exclamation-triangle me-1"></i>YELLOW:$1</span>');
+        html = html.replace(/\[RED:([^\]]+)\]/g, '<span class="compliance-badge compliance-red"><i class="fas fa-times-circle me-1"></i>RED:$1</span>');
+        html = html.replace(/\[GRAY:([^\]]+)\]/g, '<span class="compliance-badge compliance-gray"><i class="fas fa-question-circle me-1"></i>GRAY:$1</span>');
         
         // Handle simple format as fallback
-        html = html.replace(/\[GREEN\]/g, '<span class="badge bg-success">GREEN</span>');
-        html = html.replace(/\[YELLOW\]/g, '<span class="badge bg-warning text-dark">YELLOW</span>');
-        html = html.replace(/\[RED\]/g, '<span class="badge bg-danger">RED</span>');
-        html = html.replace(/\[GRAY\]/g, '<span class="badge bg-secondary">GRAY</span>');
+        html = html.replace(/\[GREEN\]/g, '<span class="compliance-badge compliance-green"><i class="fas fa-check-circle me-1"></i>GREEN</span>');
+        html = html.replace(/\[YELLOW\]/g, '<span class="compliance-badge compliance-yellow"><i class="fas fa-exclamation-triangle me-1"></i>YELLOW</span>');
+        html = html.replace(/\[RED\]/g, '<span class="compliance-badge compliance-red"><i class="fas fa-times-circle me-1"></i>RED</span>');
+        html = html.replace(/\[GRAY\]/g, '<span class="compliance-badge compliance-gray"><i class="fas fa-question-circle me-1"></i>GRAY</span>');
         
-        // Style headers
-        html = html.replace(/^# (.+)$/gm, '<h3 class="text-primary mt-4 mb-3">$1</h3>');
-        html = html.replace(/^## (.+)$/gm, '<h4 class="text-secondary mt-3 mb-2">$1</h4>');
-        html = html.replace(/^### (.+)$/gm, '<h5 class="text-dark mt-2 mb-2">$1</h5>');
+        // Style main headers with professional sections
+        html = html.replace(/^# (.+)$/gm, '<div class="report-section"><h2 class="section-header"><i class="fas fa-clipboard-check me-2"></i>$1</h2></div>');
+        html = html.replace(/^## (.+)$/gm, '<div class="model-section"><h3 class="model-header"><i class="fas fa-cog me-2"></i>$1</h3>');
+        html = html.replace(/^### (.+)$/gm, '<h4 class="subsection-header">$1</h4>');
         
-        // Style bullet points
-        html = html.replace(/^\* (.+)$/gm, '<li class="mb-1">$1</li>');
+        // Style compliance status lines
+        html = html.replace(/Compliance Status: (.+)$/gm, '<div class="compliance-status">Compliance Status: <strong>$1</strong></div>');
         
-        // Wrap consecutive list items in ul tags
-        html = html.replace(/(<li class="mb-1">.*<\/li>)\s*(?=<li class="mb-1">)/gs, '$1');
-        html = html.replace(/(<li class="mb-1">.*<\/li>)/gs, '<ul>$1</ul>');
+        // Style specification review sections  
+        html = html.replace(/Specification Review \(Project Requirement -> Actual Spec -> Status\):/g, '<h5 class="spec-review-header"><i class="fas fa-list-check me-2"></i>Specification Review</h5><div class="spec-review-content">');
+        
+        // Style bullet points with better formatting
+        html = html.replace(/^\* (.+)$/gm, '<div class="spec-item"><i class="fas fa-chevron-right me-2 text-muted"></i>$1</div>');
+        
+        // Style critical observations sections
+        html = html.replace(/Critical Observations:/g, '<h5 class="critical-header"><i class="fas fa-exclamation-triangle me-2"></i>Critical Observations</h5>');
+        
+        // Close any open sections
+        html = html.replace(/(<div class="model-section">(?:(?!<div class="model-section">).)*?)(?=<div class="report-section">|<div class="model-section">|$)/gs, '$1</div>');
+        html = html.replace(/(<div class="spec-review-content">(?:(?!<h5|<div class="model-section">|<div class="report-section">).)*?)(?=<h5|<div class="model-section">|<div class="report-section">|$)/gs, '$1</div>');
+        
+        // Add final closing div if needed
+        if (html.includes('<div class="model-section">') && !html.endsWith('</div>')) {
+            html += '</div>';
+        }
         
         reportContent.innerHTML = html;
     }
