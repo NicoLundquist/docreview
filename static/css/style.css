@@ -282,3 +282,32 @@ footer {
 .status-insufficient {
     background-color: var(--gray-neutral);
 }
+
+/* Enhanced compliance badges */
+.report-content .badge {
+    font-size: 0.75rem;
+    padding: 0.35em 0.65em;
+    margin: 0 2px;
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+.report-content .badge.bg-success {
+    background-color: var(--success-green) !important;
+    color: white;
+}
+
+.report-content .badge.bg-warning {
+    background-color: var(--warning-yellow) !important;
+    color: #000 !important;
+}
+
+.report-content .badge.bg-danger {
+    background-color: var(--danger-red) !important;
+    color: white;
+}
+
+.report-content .badge.bg-secondary {
+    background-color: var(--gray-neutral) !important;
+    color: white;
+}

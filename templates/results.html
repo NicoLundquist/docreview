@@ -153,9 +153,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (reportContent) {
         let html = reportContent.innerHTML;
         
-        // Style compliance markers
+        // Style compliance markers - handle full format like [GREEN: MEETS]
+        html = html.replace(/\[GREEN:([^\]]+)\]/g, '<span class="badge bg-success">GREEN:$1</span>');
+        html = html.replace(/\[YELLOW:([^\]]+)\]/g, '<span class="badge bg-warning text-dark">YELLOW:$1</span>');
+        html = html.replace(/\[RED:([^\]]+)\]/g, '<span class="badge bg-danger">RED:$1</span>');
+        html = html.replace(/\[GRAY:([^\]]+)\]/g, '<span class="badge bg-secondary">GRAY:$1</span>');
+        
+        // Handle simple format as fallback
         html = html.replace(/\[GREEN\]/g, '<span class="badge bg-success">GREEN</span>');
-        html = html.replace(/\[YELLOW\]/g, '<span class="badge bg-warning">YELLOW</span>');
+        html = html.replace(/\[YELLOW\]/g, '<span class="badge bg-warning text-dark">YELLOW</span>');
         html = html.replace(/\[RED\]/g, '<span class="badge bg-danger">RED</span>');
         html = html.replace(/\[GRAY\]/g, '<span class="badge bg-secondary">GRAY</span>');
         
