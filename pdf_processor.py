@@ -3,173 +3,194 @@ import pdfplumber
 import pytesseract
 from PIL import Image
 import io
+import re
 
-# Disable debug logging for pdfminer to prevent issues
-import pdfminer
-import pdfplumber.utils
+# Disable debug logging for PDF libraries
 logging.getLogger('pdfminer').setLevel(logging.WARNING)
 logging.getLogger('pdfplumber').setLevel(logging.WARNING)
 
+def clean_text_for_api(text):
+    """
+    Clean text to ensure it's ASCII-safe for API transmission
+    """
+    if not text:
+        return ""
+    
+    # Replace common Unicode characters with ASCII equivalents
+    replacements = {
+        '\u2019': "'",  # Right single quotation mark
+        '\u2018': "'",  # Left single quotation mark
+        '\u201c': '"',  # Left double quotation mark
+        '\u201d': '"',  # Right double quotation mark
+        '\u2013': '-',  # En dash
+        '\u2014': '--', # Em dash
+        '\u2026': '...',  # Ellipsis
+        '\u00b0': ' degrees',  # Degree symbol
+        '\u00bd': '1/2',  # Half
+        '\u00bc': '1/4',  # Quarter
+        '\u00be': '3/4',  # Three quarters
+        '\u00b2': '^2',  # Superscript 2
+        '\u00b3': '^3',  # Superscript 3
+        '\u2022': '*',  # Bullet
+        '\u00d7': 'x',  # Multiplication
+        '\u00f7': '/',  # Division
+        '\u03bc': 'u',  # Micro/mu
+        '\u00b1': '+/-',  # Plus-minus
+        '\u2265': '>=',  # Greater than or equal
+        '\u2264': '<=',  # Less than or equal
+        '\u2260': '!=',  # Not equal
+        '\u00a9': '(c)',  # Copyright
+        '\u00ae': '(R)',  # Registered
+        '\u2122': '(TM)',  # Trademark
+    }
+    
+    for unicode_char, ascii_char in replacements.items():
+        text = text.replace(unicode_char, ascii_char)
+    
+    # Remove any remaining non-ASCII characters
+    text = ''.join(char if ord(char) < 128 else ' ' for char in text)
+    
+    # Clean up excessive whitespace
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+    
+    return text.strip()
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
-    Extract text content from a PDF file using pdfplumber
-    
-    Args:
-        pdf_path (str): Path to the PDF file
-        
-    Returns:
-        str: Extracted text content
-        
-    Raises:
-        Exception: If PDF processing fails
+    Extract text from PDF using a multi-step approach:
+    1. Try digital text extraction first (for text-based PDFs)
+    2. Use OCR for pages where text extraction fails (for scanned PDFs)
+    3. Extract and structure tables separately
+    4. Maintain document structure and layout
     """
+    
+    extracted_content = []
+    
+    logging.info(f"Starting PDF processing for: {pdf_path}")
+    
     try:
-        logging.info(f"Starting text extraction from PDF: {pdf_path}")
-        
-        extracted_text = ""
-        
         with pdfplumber.open(pdf_path) as pdf:
             total_pages = len(pdf.pages)
-            logging.info(f"PDF has {total_pages} pages")
+            logging.info(f"Processing {total_pages} pages...")
             
             for page_num, page in enumerate(pdf.pages, 1):
+                page_content = []
+                page_content.append(f"\n{'='*50}")
+                page_content.append(f"PAGE {page_num}")
+                page_content.append(f"{'='*50}\n")
+                
+                # Step 1: Try to extract digital text
                 try:
-                    # Add page marker for reference
-                    extracted_text += f"\n--- PAGE {page_num} ---\n"
+                    import signal
                     
-                    # Extract text from the page with error handling
-                    page_text = ""
+                    def timeout_handler(signum, frame):
+                        raise TimeoutError("Text extraction timed out")
+                    
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(15)  # 15 second timeout
+                    
                     try:
-                        # Try primary text extraction with timeout
+                        # Extract text with layout preservation
+                        text = page.extract_text(layout=True, x_tolerance=2)
+                        signal.alarm(0)
+                    except:
+                        signal.alarm(0)
+                        # Fallback to simple extraction
+                        text = page.extract_text()
+                    
+                    if text and len(text.strip()) > 50:
+                        logging.info(f"Page {page_num}: Digital text extraction successful")
+                        page_content.append("==DIGITAL TEXT EXTRACTION==")
+                        page_content.append(clean_text_for_api(text))
+                        
+                        # Also try to extract tables if present
+                        try:
+                            tables = page.extract_tables()
+                            if tables:
+                                page_content.append("\n==TABLES FOUND==")
+                                for idx, table in enumerate(tables, 1):
+                                    if table and len(table) > 0:
+                                        page_content.append(f"\nTable {idx}:")
+                                        for row in table:
+                                            if row:
+                                                cleaned_row = []
+                                                for cell in row:
+                                                    cleaned_row.append(clean_text_for_api(str(cell) if cell else ""))
+                                                page_content.append(" | ".join(cleaned_row))
+                        except Exception as e:
+                            logging.warning(f"Table extraction failed for page {page_num}: {str(e)}")
+                    
+                    else:
+                        # Text extraction failed or returned too little, use OCR
+                        raise ValueError("Insufficient text extracted")
+                        
+                except (TimeoutError, ValueError, Exception) as e:
+                    # Step 2: Fall back to OCR
+                    logging.info(f"Page {page_num}: Falling back to OCR extraction")
+                    page_content.append(f"==START OF OCR FOR PAGE {page_num}==")
+                    
+                    try:
+                        # Convert page to image for OCR
+                        pil_image = page.to_image(resolution=200)
+                        img = pil_image.original
+                        
+                        # Perform OCR with timeout protection
                         import signal
                         
                         def timeout_handler(signum, frame):
-                            raise TimeoutError("Text extraction timed out")
+                            raise TimeoutError("OCR timed out")
                         
                         signal.signal(signal.SIGALRM, timeout_handler)
-                        signal.alarm(10)  # 10 second timeout for text extraction
+                        signal.alarm(30)  # 30 second timeout for OCR
                         
                         try:
-                            page_text = page.extract_text()
-                            if page_text:
-                                extracted_text += page_text
+                            # Use Tesseract with page segmentation mode for better results
+                            custom_config = r'--oem 3 --psm 6'
+                            ocr_text = pytesseract.image_to_string(img, lang='eng', config=custom_config)
+                            page_content.append(clean_text_for_api(ocr_text))
                         finally:
                             signal.alarm(0)
                             
-                    except (TimeoutError, SystemExit) as timeout_error:
-                        logging.warning(f"Text extraction timed out for page {page_num}")
-                        extracted_text += f"\n[TEXT EXTRACTION TIMED OUT FOR PAGE {page_num}]\n"
-                    except Exception as text_error:
-                        logging.warning(f"Text extraction failed for page {page_num}: {str(text_error)}")
-                        # Try alternative text extraction method
-                        try:
-                            # Fallback: try to extract text using different method
-                            page_chars = page.chars
-                            if page_chars:
-                                page_text = ''.join([char.get('text', '') for char in page_chars])
-                                if page_text:
-                                    extracted_text += page_text
-                        except Exception as fallback_error:
-                            logging.warning(f"Fallback text extraction also failed for page {page_num}: {str(fallback_error)}")
-                            extracted_text += f"\n[TEXT EXTRACTION FAILED FOR PAGE {page_num}]\n"
-                        
-                    # Try to extract table data if present with error handling
-                    try:
-                        tables = page.extract_tables()
-                        if tables:
-                            extracted_text += f"\n--- TABLES ON PAGE {page_num} ---\n"
-                            for table_num, table in enumerate(tables, 1):
-                                try:
-                                    extracted_text += f"\nTable {table_num}:\n"
-                                    for row in table:
-                                        if row:
-                                            # Filter out None values and join
-                                            clean_row = [str(cell) if cell is not None else "" for cell in row]
-                                            extracted_text += " | ".join(clean_row) + "\n"
-                                except Exception as table_row_error:
-                                    logging.warning(f"Error processing table {table_num} on page {page_num}: {str(table_row_error)}")
-                                    continue
-                    except Exception as table_error:
-                        logging.warning(f"Table extraction failed for page {page_num}: {str(table_error)}")
+                    except TimeoutError:
+                        logging.warning(f"OCR timed out for page {page_num}")
+                        page_content.append("[OCR TIMED OUT FOR THIS PAGE]")
+                    except Exception as ocr_error:
+                        logging.error(f"OCR failed for page {page_num}: {str(ocr_error)}")
+                        page_content.append(f"[OCR FAILED: {str(ocr_error)}]")
                     
-                    # Extract text from images using OCR (ensures we capture all information)
-                    # Only run OCR if we didn't get much text from regular extraction
-                    if not page_text or len(page_text.strip()) < 100:
-                        try:
-                            # Convert page to image for OCR processing with lower resolution for speed
-                            page_img = page.to_image(resolution=150)
-                            if page_img and hasattr(page_img, 'original'):
-                                pil_img = page_img.original
-                                
-                                # Use OCR with timeout and simpler config for speed
-                                import signal
-                                
-                                def timeout_handler(signum, frame):
-                                    raise TimeoutError("OCR processing timed out")
-                                
-                                # Set up timeout (15 seconds max for OCR)
-                                signal.signal(signal.SIGALRM, timeout_handler)
-                                signal.alarm(15)
-                                
-                                try:
-                                    # Use faster OCR config
-                                    ocr_text = pytesseract.image_to_string(pil_img, config='--psm 6 --oem 3', timeout=10)
-                                    if ocr_text and ocr_text.strip():
-                                        extracted_text += f"\n--- OCR EXTRACTED TEXT FROM PAGE {page_num} ---\n"
-                                        extracted_text += ocr_text.strip()
-                                finally:
-                                    signal.alarm(0)  # Cancel the alarm
-                                    
-                        except TimeoutError:
-                            logging.warning(f"OCR processing timed out for page {page_num}")
-                            if not page_text.strip():
-                                extracted_text += f"\n[PAGE {page_num} CONTAINS IMAGES - OCR TIMED OUT]\n"
-                        except Exception as ocr_error:
-                            logging.warning(f"OCR processing failed for page {page_num}: {str(ocr_error)}")
-                            if not page_text.strip():
-                                extracted_text += f"\n[PAGE {page_num} MIGHT CONTAIN IMAGE-BASED TEXT - OCR FAILED]\n"
-                    
-                    logging.debug(f"Processed page {page_num}/{total_pages}")
-                    
-                except Exception as page_error:
-                    logging.warning(f"Error processing page {page_num}: {str(page_error)}")
-                    extracted_text += f"\n--- PAGE {page_num} (ERROR PROCESSING) ---\n"
-                    continue
+                    page_content.append(f"==END OF OCR FOR PAGE {page_num}==")
+                
+                extracted_content.append('\n'.join(page_content))
+                
+        # Combine all content
+        final_content = []
         
-        if not extracted_text.strip():
-            # Last resort: log detailed information and provide a more helpful error
-            logging.error(f"No text content could be extracted from PDF: {pdf_path}")
-            raise ValueError("Unable to extract readable text from this PDF. The file may be corrupted, heavily image-based, or use unsupported formatting. Please ensure the PDF contains readable text or try a different file.")
+        # Add document structure header
+        final_content.append("="*60)
+        final_content.append("DOCUMENT CONTENT EXTRACTION")
+        final_content.append("="*60)
         
-        logging.info(f"Successfully extracted {len(extracted_text)} characters from PDF")
-        return extracted_text.strip()
+        # Add main content
+        final_content.extend(extracted_content)
+        
+        # Final cleanup
+        result = '\n'.join(final_content)
+        result = clean_text_for_api(result)
+        
+        # Ensure the result is not too long for the API
+        max_chars = 50000  # Reasonable limit
+        if len(result) > max_chars:
+            logging.warning(f"Content truncated from {len(result)} to {max_chars} characters")
+            result = result[:max_chars] + "\n\n[CONTENT TRUNCATED DUE TO LENGTH]"
+        
+        logging.info(f"PDF processing complete. Extracted {len(result)} characters.")
+        return result
         
     except Exception as e:
-        logging.error(f"PDF processing error for {pdf_path}: {str(e)}")
-        raise Exception(f"Failed to process PDF: {str(e)}")
-
-def validate_pdf_content(text: str) -> bool:
-    """
-    Validate that extracted PDF content appears to contain meaningful engineering data
-    
-    Args:
-        text (str): Extracted text content
-        
-    Returns:
-        bool: True if content appears valid
-    """
-    if not text or len(text.strip()) < 50:
-        return False
-    
-    # Check for common engineering terms/patterns
-    engineering_indicators = [
-        'specification', 'requirements', 'pressure', 'temperature', 'capacity',
-        'material', 'design', 'performance', 'dimensions', 'standards',
-        'rating', 'model', 'technical', 'flow', 'power', 'efficiency'
-    ]
-    
-    text_lower = text.lower()
-    found_indicators = sum(1 for indicator in engineering_indicators if indicator in text_lower)
-    
-    # Require at least 3 engineering-related terms
-    return found_indicators >= 3
+        logging.error(f"Critical error in PDF processing: {str(e)}")
+        # Return whatever we managed to extract
+        if extracted_content:
+            return clean_text_for_api('\n'.join(extracted_content))
+        else:
+            return f"[PDF EXTRACTION FAILED: {str(e)}]"
