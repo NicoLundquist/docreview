@@ -321,7 +321,7 @@ SUBMITTAL:
                 {"role": "system", "content": clean_system_prompt},
                 {"role": "user", "content": clean_user_message}
             ],
-            "temperature": 0,
+            # temperature removed - GPT-5 only supports default value of 1
             "max_completion_tokens": 8000
         }
         
