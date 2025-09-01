@@ -51,11 +51,10 @@ def upload_files():
         vendor_submittal_file.save(vendor_submittal_path)
         
         # Create database record
-        review = ComplianceReview(
-            project_spec_filename=project_spec_file.filename,
-            submittal_filename=vendor_submittal_file.filename,
-            status='pending'
-        )
+        review = ComplianceReview()
+        review.project_spec_filename = project_spec_file.filename
+        review.submittal_filename = vendor_submittal_file.filename
+        review.status = 'pending'
         db.session.add(review)
         db.session.commit()
         

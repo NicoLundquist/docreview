@@ -11,9 +11,13 @@ import unicodedata
 try:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass  # Fallback to environment variables for older Python versions
+
+try:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-except Exception:
+except (AttributeError, OSError):
     pass  # Fallback to environment variables for older Python versions
 
 # Rebuild root logging with UTF-8 handlers
