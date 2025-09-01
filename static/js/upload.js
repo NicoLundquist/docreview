@@ -8,6 +8,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const vendorSubmittalInfo = document.getElementById('vendorSubmittalInfo');
     const submitBtn = document.getElementById('submitBtn');
     
+    // Only run upload functionality if elements exist (on upload page)
+    if (!projectSpecInput || !vendorSubmittalInput || !projectSpecArea || 
+        !vendorSubmittalArea || !projectSpecInfo || !vendorSubmittalInfo || !submitBtn) {
+        return; // Exit if not on upload page
+    }
+    
     // File validation
     function validateFile(file) {
         const maxSize = 50 * 1024 * 1024; // 50MB
@@ -133,7 +139,9 @@ document.addEventListener('DOMContentLoaded', function() {
     setupDragAndDrop(vendorSubmittalArea, vendorSubmittalInput, vendorSubmittalInfo);
     
     // Form submission validation
-    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    const uploadForm = document.getElementById('uploadForm');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', function(e) {
         const projectFile = projectSpecInput.files[0];
         const vendorFile = vendorSubmittalInput.files[0];
         
@@ -157,7 +165,8 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
         
         return true;
-    });
+        });
+    }
     
     // Initialize button state
     checkSubmitButton();

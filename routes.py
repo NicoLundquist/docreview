@@ -84,6 +84,15 @@ def upload_files():
             review.report_content = analysis_result
             review.status = 'completed'
             
+            # Debug: Show what we're saving to database
+            logging.info("=" * 80)
+            logging.info("SAVING TO DATABASE:")
+            logging.info(f"Review ID: {review.id}")
+            logging.info(f"Status: {review.status}")
+            logging.info(f"Report content length: {len(analysis_result) if analysis_result else 0}")
+            logging.info(f"Report content first 500 chars: {analysis_result[:500] if analysis_result else 'None'}")
+            logging.info("=" * 80)
+            
             # Try to extract summary data (basic parsing)
             lines = analysis_result.split('\n') if analysis_result else []
             for line in lines:
@@ -101,6 +110,15 @@ def upload_files():
                         pass
             
             db.session.commit()
+            
+            # Debug: Verify what was actually saved
+            logging.info("=" * 80)
+            logging.info("VERIFICATION AFTER DATABASE COMMIT:")
+            fresh_review = ComplianceReview.query.get(review.id)
+            logging.info(f"Fresh review status: {fresh_review.status}")
+            logging.info(f"Fresh review report content length: {len(fresh_review.report_content) if fresh_review.report_content else 0}")
+            logging.info(f"Fresh review overall status: {fresh_review.overall_status}")
+            logging.info("=" * 80)
             
             flash('Compliance analysis completed successfully!', 'success')
             return redirect(url_for('view_results', review_id=review.id))
@@ -130,6 +148,20 @@ def upload_files():
 def view_results(review_id):
     """Display compliance analysis results"""
     review = ComplianceReview.query.get_or_404(review_id)
+    
+    # Debug: Show what we're displaying
+    logging.info("=" * 80)
+    logging.info(f"DISPLAYING RESULTS FOR REVIEW {review_id}:")
+    logging.info(f"Status: {review.status}")
+    logging.info(f"Report content length: {len(review.report_content) if review.report_content else 0}")
+    logging.info(f"Overall status: {review.overall_status}")
+    logging.info(f"Models reviewed: {review.models_reviewed}")
+    logging.info(f"Compliant models: {review.compliant_models}")
+    if review.report_content:
+        logging.info(f"Report content first 500 chars: {review.report_content[:500]}")
+    else:
+        logging.info("NO REPORT CONTENT FOUND!")
+    logging.info("=" * 80)
     
     if review.status == 'error':
         flash(f'Analysis failed: {review.error_message}', 'error')

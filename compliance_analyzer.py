@@ -438,6 +438,15 @@ SUBMITTAL:
         result_json = response.json()
         result = result_json['choices'][0]['message']['content']
         logging.info("Compliance analysis completed successfully")
+        
+        # Debug: Show the AI report content in console
+        logging.info("=" * 80)
+        logging.info("AI COMPLIANCE REPORT CONTENT:")
+        logging.info("=" * 80)
+        logging.info(result)
+        logging.info("=" * 80)
+        logging.info(f"Report length: {len(result)} characters")
+        
         return result
 
     except Exception as e:
