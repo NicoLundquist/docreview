@@ -6,6 +6,7 @@ from app import app, db
 from models import ComplianceReview
 from pdf_processor import extract_text_from_pdf
 from compliance_analyzer import analyze_compliance
+from pdf_generator import generate_compliance_pdf
 import uuid
 
 ALLOWED_EXTENSIONS = {'pdf'}
@@ -214,18 +215,39 @@ def view_results(review_id):
 
 @app.route('/download/<int:review_id>')
 def download_report(review_id):
-    """Download compliance report as text file"""
+    """Download compliance report as formatted PDF"""
     review = ComplianceReview.query.get_or_404(review_id)
     
     if review.status != 'completed' or not review.report_content:
         flash('Report not available', 'error')
         return redirect(url_for('index'))
     
-    response = make_response(review.report_content)
-    response.headers['Content-Type'] = 'text/plain'
-    response.headers['Content-Disposition'] = f'attachment; filename=compliance_report_{review_id}.txt'
-    
-    return response
+    try:
+        # Prepare review data for PDF generation
+        review_data = {
+            'id': review.id,
+            'created_at': review.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') if review.created_at else 'N/A',
+            'project_spec_filename': review.project_spec_filename or 'N/A',
+            'submittal_filename': review.submittal_filename or 'N/A',
+            'overall_status': review.overall_status or 'N/A',
+            'models_reviewed': review.models_reviewed,
+            'compliant_models': review.compliant_models
+        }
+        
+        # Generate PDF
+        pdf_content = generate_compliance_pdf(review.report_content, review_data)
+        
+        # Create response with PDF
+        response = make_response(pdf_content)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=compliance_report_{review_id}.pdf'
+        
+        return response
+        
+    except Exception as e:
+        logging.error(f"PDF generation error: {str(e)}")
+        flash('Error generating PDF report', 'error')
+        return redirect(url_for('view_results', review_id=review_id))
 
 @app.route('/history')
 def view_history():
