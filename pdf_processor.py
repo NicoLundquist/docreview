@@ -71,33 +71,41 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                         logging.warning(f"Table extraction failed for page {page_num}: {str(table_error)}")
                     
                     # Extract text from images using OCR (ensures we capture all information)
-                    try:
-                        # Convert page to image for OCR processing
-                        page_img = page.to_image(resolution=200)
-                        if page_img and hasattr(page_img, 'original'):
-                            pil_img = page_img.original
-                            
-                            # Use OCR to extract text from the entire page image
-                            ocr_text = pytesseract.image_to_string(pil_img, config='--psm 6')
-                            if ocr_text and ocr_text.strip():
-                                # Only add OCR text if it contains substantial additional content
-                                ocr_lines = [line.strip() for line in ocr_text.split('\n') if line.strip()]
-                                page_lines = [line.strip() for line in (page_text or '').split('\n') if line.strip()]
+                    # Only run OCR if we didn't get much text from regular extraction
+                    if not page_text or len(page_text.strip()) < 100:
+                        try:
+                            # Convert page to image for OCR processing with lower resolution for speed
+                            page_img = page.to_image(resolution=150)
+                            if page_img and hasattr(page_img, 'original'):
+                                pil_img = page_img.original
                                 
-                                # Check if OCR found additional text not in the regular extraction
-                                ocr_content = ' '.join(ocr_lines).lower()
-                                page_content = ' '.join(page_lines).lower()
+                                # Use OCR with timeout and simpler config for speed
+                                import signal
                                 
-                                # Add OCR text if it's significantly different or if no text was extracted
-                                if not page_text or len(ocr_content) > len(page_content) * 1.2:
-                                    extracted_text += f"\n--- OCR EXTRACTED TEXT FROM PAGE {page_num} ---\n"
-                                    extracted_text += ocr_text.strip()
+                                def timeout_handler(signum, frame):
+                                    raise TimeoutError("OCR processing timed out")
+                                
+                                # Set up timeout (15 seconds max for OCR)
+                                signal.signal(signal.SIGALRM, timeout_handler)
+                                signal.alarm(15)
+                                
+                                try:
+                                    # Use faster OCR config
+                                    ocr_text = pytesseract.image_to_string(pil_img, config='--psm 6 --oem 3', timeout=10)
+                                    if ocr_text and ocr_text.strip():
+                                        extracted_text += f"\n--- OCR EXTRACTED TEXT FROM PAGE {page_num} ---\n"
+                                        extracted_text += ocr_text.strip()
+                                finally:
+                                    signal.alarm(0)  # Cancel the alarm
                                     
-                    except Exception as ocr_error:
-                        logging.warning(f"OCR processing failed for page {page_num}: {str(ocr_error)}")
-                        # If OCR fails, at least note that there might be image content
-                        if not page_text.strip():
-                            extracted_text += f"\n[PAGE {page_num} MIGHT CONTAIN IMAGE-BASED TEXT - OCR FAILED]\n"
+                        except TimeoutError:
+                            logging.warning(f"OCR processing timed out for page {page_num}")
+                            if not page_text.strip():
+                                extracted_text += f"\n[PAGE {page_num} CONTAINS IMAGES - OCR TIMED OUT]\n"
+                        except Exception as ocr_error:
+                            logging.warning(f"OCR processing failed for page {page_num}: {str(ocr_error)}")
+                            if not page_text.strip():
+                                extracted_text += f"\n[PAGE {page_num} MIGHT CONTAIN IMAGE-BASED TEXT - OCR FAILED]\n"
                     
                     logging.debug(f"Processed page {page_num}/{total_pages}")
                     
