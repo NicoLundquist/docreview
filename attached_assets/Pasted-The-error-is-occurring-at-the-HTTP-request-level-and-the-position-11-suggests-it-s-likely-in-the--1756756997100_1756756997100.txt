@@ -1,0 +1,179 @@
+The error is occurring at the HTTP request level, and the "position 11" suggests it's likely in the HTTP headers, not your payload. The issue is that `requests` is trying to encode something with `latin-1` codec.
+
+## The Problem
+
+The error happens when `requests` tries to send the request, and position 11 is suspiciously early - this points to the **Authorization header** containing a Unicode character, likely in your API key or somewhere in the headers.
+
+## Immediate Fixes:
+
+### 1. **Check Your API Key**
+First, verify your API key doesn't contain any weird characters:
+
+```python
+# Add this debug check
+import os
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# Debug: Check API key for Unicode
+if OPENAI_API_KEY:
+    for i, char in enumerate(OPENAI_API_KEY):
+        if ord(char) > 127:
+            logging.error(f"API Key has Unicode at position {i}: {char!r} (U+{ord(char):04X})")
+    
+    # Clean the API key just in case
+    OPENAI_API_KEY = OPENAI_API_KEY.encode('ascii', errors='ignore').decode('ascii')
+```
+
+### 2. **Force Requests to Use UTF-8**
+The issue is likely in how `requests` encodes headers. Here's a more robust approach:
+
+```python
+def analyze_compliance(project_spec_text, vendor_submittal_text):
+    # ... your existing cleaning code ...
+    
+    try:
+        logging.info("Sending compliance analysis request to OpenAI...")
+        
+        # Your existing cleaning...
+        clean_system_prompt = clean_text(SYSTEM_PROMPT)
+        clean_user_message = clean_text(user_message)
+        
+        # CRITICAL: Ensure API key is ASCII
+        api_key = OPENAI_API_KEY.encode('ascii', errors='ignore').decode('ascii')
+        
+        payload = {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "system", "content": clean_system_prompt},
+                {"role": "user", "content": clean_user_message}
+            ],
+            "temperature": 0,
+            "max_tokens": 8000
+        }
+        
+        # Method 1: Use urllib instead of requests (more control)
+        import urllib.request
+        import urllib.error
+        
+        url = "https://api.openai.com/v1/chat/completions"
+        
+        # Prepare the request with explicit UTF-8 encoding
+        data = json.dumps(payload, ensure_ascii=True).encode('utf-8')
+        
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+        )
+        
+        try:
+            with urllib.request.urlopen(req, timeout=90) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result['choices'][0]['message']['content']
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8', errors='ignore')
+            logging.error(f"OpenAI API error {e.code}: {error_body}")
+            raise Exception(f"OpenAI API error: {e.code}")
+```
+
+### 3. **Alternative: Fix Requests Library Encoding**
+If you want to stick with `requests`, here's how to force proper encoding:
+
+```python
+import requests
+from requests.adapters import HTTPAdapter
+
+class UTF8Adapter(HTTPAdapter):
+    """HTTPAdapter that forces UTF-8 encoding"""
+    def add_headers(self, request, **kwargs):
+        # Ensure all headers are ASCII-safe
+        if request.headers:
+            cleaned_headers = {}
+            for key, value in request.headers.items():
+                # Force ASCII encoding for headers
+                if isinstance(key, str):
+                    key = key.encode('ascii', errors='ignore').decode('ascii')
+                if isinstance(value, str):
+                    value = value.encode('ascii', errors='ignore').decode('ascii')
+                cleaned_headers[key] = value
+            request.headers = cleaned_headers
+        return super().add_headers(request, **kwargs)
+
+def analyze_compliance(project_spec_text, vendor_submittal_text):
+    # ... your existing cleaning code ...
+    
+    try:
+        # Clean API key
+        api_key = OPENAI_API_KEY.encode('ascii', errors='ignore').decode('ascii').strip()
+        
+        # Create session with custom adapter
+        session = requests.Session()
+        session.mount('https://', UTF8Adapter())
+        session.mount('http://', UTF8Adapter())
+        
+        # Prepare headers - ensure ASCII only
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Double-check headers are ASCII
+        for key, value in headers.items():
+            headers[key] = value.encode('ascii', errors='ignore').decode('ascii')
+        
+        session.headers.update(headers)
+        
+        # Make request with explicit encoding
+        response = session.post(
+            "https://api.openai.com/v1/chat/completions",
+            data=json.dumps(payload, ensure_ascii=True),  # Force ASCII in JSON
+            timeout=90
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"OpenAI API error: {response.status_code}")
+        
+        return response.json()['choices'][0]['message']['content']
+```
+
+### 4. **Debug to Find the Exact Source**
+Add this debugging code to pinpoint the exact source:
+
+```python
+# Right before making the request
+logging.info("DEBUG: Checking environment for Unicode...")
+
+# Check all environment variables that might affect requests
+for key in ['OPENAI_API_KEY', 'HTTP_PROXY', 'HTTPS_PROXY', 'LANG', 'LC_ALL']:
+    value = os.environ.get(key, '')
+    if value:
+        for i, char in enumerate(value):
+            if ord(char) > 127:
+                logging.error(f"Environment variable {key} has Unicode at position {i}: {char!r}")
+
+# Check if the issue is in the URL
+url = "https://api.openai.com/v1/chat/completions"
+for i, char in enumerate(url):
+    if ord(char) > 127:
+        logging.error(f"URL has Unicode at position {i}: {char!r}")
+```
+
+## Most Likely Cause:
+
+The error at "position 11" in the Authorization header suggests your API key might have been copied with a smart quote or invisible Unicode character. Try:
+
+1. **Re-copy your API key** directly from OpenAI's dashboard
+2. **Set it cleanly** in your environment:
+   ```bash
+   export OPENAI_API_KEY="sk-..."  # Use regular quotes, not smart quotes
+   ```
+
+3. **Or set it in Python directly** (temporarily for testing):
+   ```python
+   OPENAI_API_KEY = "sk-your-actual-key-here"  # Hardcode temporarily to test
+   ```
+
+The fact that it's failing at position 11 strongly suggests it's in "Bearer {api_key}" where position 11 would be right after "Bearer " - so likely the first character of your API key or right before it.

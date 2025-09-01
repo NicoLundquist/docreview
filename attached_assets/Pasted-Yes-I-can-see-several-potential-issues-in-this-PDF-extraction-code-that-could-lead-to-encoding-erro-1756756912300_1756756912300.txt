@@ -1,0 +1,224 @@
+Yes, I can see several potential issues in this PDF extraction code that could lead to encoding errors:
+
+## Critical Issues:
+
+### 1. **Signal Handling on Non-Unix Systems**
+The `signal.SIGALRM` is **Unix-only** and will crash on Windows:
+
+```python
+signal.signal(signal.SIGALRM, timeout_handler)  # This fails on Windows!
+signal.alarm(15)
+```
+
+**Fix:**
+```python
+import platform
+import threading
+
+def extract_with_timeout(func, timeout_seconds, *args, **kwargs):
+    """Cross-platform timeout handler"""
+    result = [None]
+    exception = [None]
+    
+    def target():
+        try:
+            result[0] = func(*args, **kwargs)
+        except Exception as e:
+            exception[0] = e
+    
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout_seconds)
+    
+    if thread.is_alive():
+        # Thread is still running, timeout occurred
+        raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+    
+    if exception[0]:
+        raise exception[0]
+    
+    return result[0]
+
+# Usage:
+try:
+    if platform.system() != 'Windows':
+        # Unix-like systems - use signal
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(15)
+        text = page.extract_text(layout=True, x_tolerance=2)
+        signal.alarm(0)
+    else:
+        # Windows or fallback - use threading
+        text = extract_with_timeout(page.extract_text, 15, layout=True, x_tolerance=2)
+except TimeoutError:
+    text = page.extract_text()  # Simple fallback
+```
+
+### 2. **Incomplete Unicode Character Replacement**
+Your `clean_text_for_api` function might miss characters that commonly appear in PDFs:
+
+```python
+def clean_text_for_api(text):
+    """Enhanced cleaning with more comprehensive replacements"""
+    if not text:
+        return ""
+    
+    # Add more common PDF characters
+    replacements = {
+        # Your existing replacements...
+        '\u00a7': 'Section ',  # Section sign
+        '\u2020': '+',  # Dagger
+        '\u2021': '++',  # Double dagger
+        '\u00b6': '[P]',  # Pilcrow (paragraph sign)
+        '\u2030': ' per thousand',  # Per mille
+        '\u00ba': ' degrees',  # Masculine ordinal
+        '\u00aa': 'a',  # Feminine ordinal
+        '\u2032': "'",  # Prime
+        '\u2033': '"',  # Double prime
+        '\u2034': "'''",  # Triple prime
+        '\u00b5': 'micro',  # Micro sign
+        '\u03c0': 'pi',  # Pi
+        '\u03b1': 'alpha',  # Alpha
+        '\u03b2': 'beta',  # Beta
+        '\u03b3': 'gamma',  # Gamma
+        '\u03b4': 'delta',  # Delta
+        '\u03a9': 'Omega',  # Omega
+        '\u221a': 'sqrt',  # Square root
+        '\u221e': 'infinity',  # Infinity
+        '\u2248': '~=',  # Approximately equal
+        '\ufeff': '',  # Zero width no-break space (BOM)
+        '\u200b': '',  # Zero width space
+        '\u200c': '',  # Zero width non-joiner
+        '\u200d': '',  # Zero width joiner
+        '\u2028': '\n',  # Line separator
+        '\u2029': '\n\n',  # Paragraph separator
+    }
+    
+    # Apply replacements
+    for unicode_char, ascii_char in replacements.items():
+        text = text.replace(unicode_char, ascii_char)
+    
+    # More aggressive cleaning
+    import string
+    
+    # Keep only printable ASCII characters plus newlines and tabs
+    printable = set(string.printable)
+    text = ''.join(char if char in printable else ' ' for char in text)
+    
+    # Remove control characters except \n, \r, \t
+    text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+    
+    # Clean up whitespace
+    text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces/tabs to single space
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Multiple newlines to double
+    text = re.sub(r'^\s+|\s+$', '', text, flags=re.MULTILINE)  # Trim line starts/ends
+    
+    return text.strip()
+```
+
+### 3. **PDFPlumber Layout Extraction Can Introduce Unicode**
+The `layout=True` parameter in `page.extract_text()` can introduce Unicode box-drawing characters:
+
+```python
+# Instead of:
+text = page.extract_text(layout=True, x_tolerance=2)
+
+# Use:
+text = page.extract_text(layout=False)  # Simpler but safer
+# Or clean immediately after:
+text = page.extract_text(layout=True, x_tolerance=2)
+if text:
+    # Remove box-drawing characters that layout=True might add
+    box_chars = '│├─└┘┌┐┤┬┴┼╭╮╯╰╱╲╳'
+    for char in box_chars:
+        text = text.replace(char, '')
+```
+
+### 4. **Table Extraction Unicode Issues**
+Tables often contain None values and special formatting:
+
+```python
+# Better table handling
+tables = page.extract_tables()
+if tables:
+    page_content.append("\n==TABLES FOUND==")
+    for idx, table in enumerate(tables, 1):
+        if table and len(table) > 0:
+            page_content.append(f"\nTable {idx}:")
+            for row in table:
+                if row:
+                    cleaned_row = []
+                    for cell in row:
+                        # Handle None and ensure string conversion
+                        cell_text = ''
+                        if cell is not None:
+                            cell_text = str(cell).strip()
+                            # Clean immediately to avoid Unicode propagation
+                            cell_text = clean_text_for_api(cell_text)
+                        cleaned_row.append(cell_text if cell_text else '-')
+                    page_content.append(" | ".join(cleaned_row))
+```
+
+### 5. **OCR Output Often Contains Unicode**
+Tesseract OCR frequently outputs Unicode characters:
+
+```python
+# Better OCR handling
+custom_config = r'--oem 3 --psm 6 -c preserve_interword_spaces=0'
+ocr_text = pytesseract.image_to_string(img, lang='eng', config=custom_config)
+
+# Clean immediately and aggressively
+ocr_text = clean_text_for_api(ocr_text)
+
+# Additional OCR-specific cleaning
+ocr_text = re.sub(r'[^\x20-\x7E\n\r\t]', '', ocr_text)  # Keep only printable ASCII
+```
+
+### 6. **Error Messages Can Contain Unicode**
+Error messages might contain file paths or system messages with Unicode:
+
+```python
+except Exception as e:
+    # Clean error messages too!
+    error_msg = str(e)
+    error_msg = error_msg.encode('ascii', errors='ignore').decode('ascii')
+    logging.error(f"Critical error in PDF processing: {error_msg}")
+    return f"[PDF EXTRACTION FAILED: {error_msg}]"
+```
+
+## Recommended Complete Fix:
+
+Here's a robust wrapper function to ensure ASCII-only output:
+
+```python
+def ensure_ascii_output(func):
+    """Decorator to ensure function output is ASCII-only"""
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        if isinstance(result, str):
+            # Final aggressive ASCII enforcement
+            result = result.encode('ascii', errors='ignore').decode('ascii')
+        return result
+    return wrapper
+
+@ensure_ascii_output
+def extract_text_from_pdf(pdf_path: str) -> str:
+    # Your existing code...
+    # But at the very end, before returning:
+    
+    # Final safety check - ensure pure ASCII
+    result = result.encode('ascii', errors='ignore').decode('ascii')
+    
+    logging.info(f"PDF processing complete. Extracted {len(result)} ASCII characters.")
+    return result
+```
+
+## Most Important Fixes:
+
+1. **Fix the signal handling** for Windows compatibility
+2. **Add the comprehensive Unicode replacement dictionary**
+3. **Clean text immediately** after extraction, not just at the end
+4. **Use `encode('ascii', errors='ignore').decode('ascii')`** as a final safety net
+
+The main issue is that PDFPlumber and Tesseract both frequently introduce Unicode characters that your current cleaning might miss. The key is to clean aggressively and immediately after each extraction step, not just at the end.
