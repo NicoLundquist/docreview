@@ -187,7 +187,7 @@ def analyze_compliance(project_spec_text, vendor_submittal_text):
     """
     Analyze compliance between project specification and vendor submittal using OpenAI
     """
-    if not openai_client:
+    if not OPENAI_API_KEY:
         raise ValueError("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.")
     
     # Prepare the user message with both documents, ensuring proper encoding
@@ -243,10 +243,9 @@ SUBMITTAL:
         clean_system_prompt = clean_text(SYSTEM_PROMPT)
         clean_user_message = clean_text(user_message)
         
-        # Manually make the API call with proper encoding
+        # Use the requests library with json parameter for proper encoding
         headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json; charset=utf-8"
+            "Authorization": f"Bearer {OPENAI_API_KEY}"
         }
         
         data = {
@@ -256,16 +255,14 @@ SUBMITTAL:
                 {"role": "user", "content": clean_user_message}
             ],
             "temperature": 0,
-            "max_tokens": 4000
+            "max_tokens": 8000  # Increased for larger documents
         }
         
-        # Convert to JSON with ensure_ascii=False to preserve UTF-8
-        json_data = json.dumps(data, ensure_ascii=False).encode('utf-8')
-        
+        # Use json parameter which handles encoding properly
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
-            data=json_data
+            json=data  # This will automatically handle UTF-8 encoding
         )
         
         if response.status_code != 200:

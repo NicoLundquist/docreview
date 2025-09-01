@@ -178,11 +178,8 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         result = '\n'.join(final_content)
         result = clean_text_for_api(result)
         
-        # Ensure the result is not too long for the API
-        max_chars = 50000  # Reasonable limit
-        if len(result) > max_chars:
-            logging.warning(f"Content truncated from {len(result)} to {max_chars} characters")
-            result = result[:max_chars] + "\n\n[CONTENT TRUNCATED DUE TO LENGTH]"
+        # No truncation - send full content to API
+        logging.info(f"Full content extracted: {len(result)} characters")
         
         logging.info(f"PDF processing complete. Extracted {len(result)} characters.")
         return result
