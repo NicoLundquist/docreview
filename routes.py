@@ -21,6 +21,10 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_files():
     """Handle file upload and initiate compliance analysis"""
+    # Set a longer timeout for this specific route
+    from flask import g
+    g.request_timeout = 1200  # 20 minutes
+    
     try:
         # Check if files were uploaded
         if 'project_spec' not in request.files or 'vendor_submittal' not in request.files:

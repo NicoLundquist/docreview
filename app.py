@@ -21,6 +21,8 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # Configure upload settings
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
+app.config['MAX_CONTENT_PATH'] = None  # Allow unlimited content path length
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
