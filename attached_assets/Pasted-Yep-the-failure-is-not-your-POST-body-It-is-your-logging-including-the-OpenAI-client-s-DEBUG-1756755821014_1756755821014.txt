@@ -1,0 +1,115 @@
+Yep — the failure is not your POST body. It is your **logging** (including the OpenAI client’s DEBUG logger) trying to print a curly apostrophe `\u2019` to a sink that is ASCII or latin-1. That is why you see both:
+
+* `ascii codec cant encode character '\u2019'`
+* `latin-1 codec cant encode character '\u2019'`
+
+Fix it by making your log sinks UTF-8 (or escaping what you log) and by silencing the OpenAI client’s verbose DEBUG output.
+
+Here is a small, drop-in hardening set you can paste near startup (before any logging):
+
+```python
+import os, sys, logging
+
+# Strongly prefer UTF-8 everywhere at runtime (PYTHONIOENCODING only helps at process start)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Rebuild root logging with UTF-8 handlers
+for h in list(logging.getLogger().handlers):
+    logging.getLogger().removeHandler(h)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s:%(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),                 # now UTF-8
+        logging.FileHandler("app.log", encoding="utf-8"),  # force UTF-8 file
+    ],
+)
+
+# Turn down noisy libraries that log raw payloads
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+# If OPENAI_LOG is set in your environment, neutralize it:
+os.environ.pop("OPENAI_LOG", None)
+
+# Helper for safely logging arbitrary text (escapes non-ASCII if your sinks regress)
+def log_safe(prefix, text):
+    try:
+        logging.info("%s%s", prefix, text)
+    except Exception:
+        logging.info("%s%s", prefix, text.encode("unicode_escape").decode("ascii"))
+```
+
+Now tweak your request/exception logging so it never forces raw Unicode through a non-UTF-8 sink:
+
+```python
+# ... inside your try block, after the POST:
+if response.status_code != 200:
+    # Avoid logging raw response.text if your sink is not UTF-8
+    log_safe("OpenAI API error body: ", response.text)
+    raise Exception(f"OpenAI API error: {response.status_code}")
+```
+
+And if you want to be extra-safe around any text you did not generate, escape it before logging:
+
+```python
+log_safe("Request user payload: ", clean_user_message)
+log_safe("Request system prompt: ", clean_system_prompt)
+```
+
+Two more guardrails you may find helpful:
+
+1. Send JSON via `json=` so `requests` handles UTF-8 correctly (your `ensure_ascii=True` is fine, but this is simpler):
+
+```python
+payload = {
+    "model": "gpt-5",
+    "messages": [
+        {"role": "system", "content": clean_system_prompt},
+        {"role": "user", "content": clean_user_message},
+    ],
+    "temperature": 0,
+    "max_tokens": 8000,
+}
+
+response = session.post(
+    "https://api.openai.com/v1/chat/completions",
+    json=payload,  # lets requests set application/json and utf-8
+    timeout=90,
+)
+```
+
+2. If you ever need to prove your payload is ASCII-only, add this assertion right before the POST:
+
+```python
+def assert_ascii(s, label=""):
+    if isinstance(s, str):
+        bad = [(i, ch, ord(ch)) for i, ch in enumerate(s) if ord(ch) >= 128]
+        if bad:
+            raise ValueError(f"Non-ASCII in {label}: first few -> {bad[:5]}")
+
+assert_ascii(clean_system_prompt, "system")
+assert_ascii(clean_user_message, "user")
+```
+
+Why this fixes your exact traceback
+
+* The DEBUG line you pasted (`DEBUG:openai._base_client:Request options: {...}`) is the OpenAI client printing your full messages to a handler that is not UTF-8. When any curly quote (U+2019) slips in, that print explodes. Making the handlers UTF-8 and/or silencing that logger removes the crash.
+* The later `'latin-1' codec cant encode` happens when you log `response.text` inside an exception path. Escaping or switching the handler to UTF-8 removes that too.
+
+If you still hit an error after this, run this quick check once and paste the results into your logs:
+
+```python
+import locale, sys
+logging.info("default=%s stdout=%s stderr=%s locale=%s",
+             sys.getdefaultencoding(),
+             getattr(sys.stdout, "encoding", None),
+             getattr(sys.stderr, "encoding", None),
+             locale.getpreferredencoding(False))
+```
+
+If any of those come back as `ANSI_X3.4-1968`, `ascii`, or `latin-1`, the logger fix above is mandatory.

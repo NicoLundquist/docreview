@@ -1,4 +1,4 @@
-# -*- coding: ascii -*-
+# -*- coding: utf-8 -*-
 import os
 import sys
 import logging
@@ -7,13 +7,41 @@ import json
 import requests
 import unicodedata
 
-# Force UTF-8 encoding everywhere (safe even though this file is ASCII-only)
-if sys.version_info[0] >= 3:
+# Strongly prefer UTF-8 everywhere at runtime (PYTHONIOENCODING only helps at process start)
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass  # Fallback to environment variables for older Python versions
+
+# Rebuild root logging with UTF-8 handlers
+for h in list(logging.getLogger().handlers):
+    logging.getLogger().removeHandler(h)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s:%(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),                 # now UTF-8
+        logging.FileHandler("app.log", encoding="utf-8"),  # force UTF-8 file
+    ],
+)
+
+# Turn down noisy libraries that log raw payloads
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+# If OPENAI_LOG is set in your environment, neutralize it:
+os.environ.pop("OPENAI_LOG", None)
+
+# Helper for safely logging arbitrary text (escapes non-ASCII if your sinks regress)
+def log_safe(prefix, text):
     try:
-        import locale
-        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+        logging.info("%s%s", prefix, text)
     except Exception:
-        pass
+        logging.info("%s%s", prefix, text.encode("unicode_escape").decode("ascii"))
 
 # Environment defaults
 os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -244,16 +272,12 @@ SUBMITTAL:
         clean_system_prompt = clean_text(SYSTEM_PROMPT)
         clean_user_message = clean_text(user_message)
         
-        # Debug: Check for any remaining non-ASCII characters
-        for i, char in enumerate(clean_system_prompt[:50]):
-            if ord(char) >= 128:
-                logging.error(f"Non-ASCII character found at position {i}: {repr(char)} (ord={ord(char)})")
-        for i, char in enumerate(clean_user_message[:200]):
-            if ord(char) >= 128:
-                logging.error(f"Non-ASCII character in user message at position {i}: {repr(char)} (ord={ord(char)})")
+        # Use safe logging for debugging if needed
+        log_safe("Starting compliance analysis with system prompt length: ", str(len(clean_system_prompt)))
+        log_safe("User message length: ", str(len(clean_user_message)))
 
-        # Prepare the data with completely clean ASCII content
-        data = {
+        # Prepare the payload 
+        payload = {
             "model": "gpt-5",  # the newest OpenAI model is "gpt-5" which was released August 7, 2025
             "messages": [
                 {"role": "system", "content": clean_system_prompt},
@@ -263,37 +287,43 @@ SUBMITTAL:
             "max_tokens": 8000
         }
 
-        # Use the official OpenAI client instead of raw requests to avoid encoding issues
+        # Assertion to verify ASCII-only content
+        def assert_ascii(s, label=""):
+            if isinstance(s, str):
+                bad = [(i, ch, ord(ch)) for i, ch in enumerate(s) if ord(ch) >= 128]
+                if bad:
+                    raise ValueError(f"Non-ASCII in {label}: first few -> {bad[:5]}")
+
+        assert_ascii(clean_system_prompt, "system")
+        assert_ascii(clean_user_message, "user")
+
+        # Use the official OpenAI client 
         try:
             from openai import OpenAI
             client = OpenAI(api_key=OPENAI_API_KEY)
-            response = client.chat.completions.create(**data)
+            response = client.chat.completions.create(**payload)
             result = response.choices[0].message.content
             logging.info("Compliance analysis completed successfully")
             return result
         except Exception as openai_error:
-            logging.error(f"OpenAI client error: {str(openai_error)}")
+            log_safe("OpenAI client error: ", str(openai_error))
             
         # Fallback to requests if OpenAI client fails
         session = requests.Session()
         session.headers.update({
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json; charset=utf-8"
+            "Authorization": f"Bearer {OPENAI_API_KEY}"
         })
 
-        # Triple-ensure ASCII by encoding each content field separately
-        data["messages"][0]["content"] = data["messages"][0]["content"].encode('ascii', errors='ignore').decode('ascii')
-        data["messages"][1]["content"] = data["messages"][1]["content"].encode('ascii', errors='ignore').decode('ascii')
-        
-        # Encode as JSON with ASCII guarantee
-        json_str = json.dumps(data, ensure_ascii=True)
         response = session.post(
             "https://api.openai.com/v1/chat/completions",
-            data=json_str.encode('ascii', errors='ignore')
+            json=payload,  # lets requests set application/json and utf-8
+            timeout=90
         )
 
         if response.status_code != 200:
-            raise Exception(f"OpenAI API error: {response.status_code} - {response.text}")
+            # Avoid logging raw response.text if your sink is not UTF-8
+            log_safe("OpenAI API error body: ", response.text)
+            raise Exception(f"OpenAI API error: {response.status_code}")
 
         result_json = response.json()
         result = result_json['choices'][0]['message']['content']
