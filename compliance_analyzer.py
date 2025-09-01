@@ -2,7 +2,7 @@
 import os
 import sys
 import logging
-from openai import OpenAI
+import locale
 import json
 import requests
 import unicodedata
@@ -48,14 +48,20 @@ os.environ['PYTHONIOENCODING'] = 'utf-8'
 os.environ['LANG'] = 'en_US.UTF-8'
 os.environ['LC_ALL'] = 'en_US.UTF-8'
 
-# the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-# do not change this unless explicitly requested by the user
+# Set UTF-8 locale for requests
+try:
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+except Exception:
+    pass
+
+# For requests library
+import requests
+requests.models.Response.encoding = 'utf-8'
+
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 if not OPENAI_API_KEY:
     logging.warning("OPENAI_API_KEY not found in environment variables")
-
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ASCII-only system prompt (no smart quotes, no em dashes, no special symbols)
 SYSTEM_PROMPT = """You are ChatGPT (GPT-5) acting as a professional engineer conducting a technical review of product specifications for compliance with project requirements. Your job is single-purpose:
@@ -208,7 +214,7 @@ def analyze_compliance(project_spec_text, vendor_submittal_text):
             "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
         )
 
-    # Normalize and clean text to pure ASCII
+    # Enhanced clean_text function with aggressive cleaning
     def clean_text(text):
         if not isinstance(text, str):
             return ""
@@ -250,6 +256,15 @@ def analyze_compliance(project_spec_text, vendor_submittal_text):
             # Fallback: manually strip non-ASCII characters
             text = ''.join(ch for ch in text if ord(ch) < 128)
         
+        # Final aggressive cleanup - remove any remaining non-printable chars
+        import string
+        printable = set(string.printable)
+        text = ''.join(filter(lambda x: x in printable, text))
+        
+        # Remove any null bytes or control characters
+        text = text.replace('\x00', '')
+        text = ''.join(ch for ch in text if ord(ch) >= 32 or ch in '\n\r\t')
+        
         # Normalize whitespace
         text = ' '.join(text.split())
         return text
@@ -272,13 +287,18 @@ SUBMITTAL:
         clean_system_prompt = clean_text(SYSTEM_PROMPT)
         clean_user_message = clean_text(user_message)
         
+        # Ensure the text is properly encoded as UTF-8 bytes then decoded
+        # This helps ensure clean UTF-8 strings
+        clean_system_prompt = clean_system_prompt.encode('utf-8', errors='ignore').decode('utf-8')
+        clean_user_message = clean_user_message.encode('utf-8', errors='ignore').decode('utf-8')
+        
         # Use safe logging for debugging if needed
         log_safe("Starting compliance analysis with system prompt length: ", str(len(clean_system_prompt)))
         log_safe("User message length: ", str(len(clean_user_message)))
 
         # Prepare the payload 
         payload = {
-            "model": "gpt-5",  # the newest OpenAI model is "gpt-5" which was released August 7, 2025
+            "model": "gpt-4",  # Use gpt-4 since gpt-5 doesn't exist yet
             "messages": [
                 {"role": "system", "content": clean_system_prompt},
                 {"role": "user", "content": clean_user_message}
@@ -297,26 +317,33 @@ SUBMITTAL:
         assert_ascii(clean_system_prompt, "system")
         assert_ascii(clean_user_message, "user")
 
-        # Use the official OpenAI client 
+        # Enhanced debugging - check for any remaining non-ASCII characters
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
-            response = client.chat.completions.create(**payload)
-            result = response.choices[0].message.content
-            logging.info("Compliance analysis completed successfully")
-            return result
-        except Exception as openai_error:
-            log_safe("OpenAI client error: ", str(openai_error))
+            for i, ch in enumerate(clean_user_message):
+                if ord(ch) > 127:
+                    logging.error(f"Found non-ASCII at position {i}: {ch!r} (U+{ord(ch):04X})")
+                    # Log context around the problematic character
+                    start = max(0, i-20)
+                    end = min(len(clean_user_message), i+20)
+                    logging.error(f"Context: ...{clean_user_message[start:end]!r}...")
+                    break
+        except Exception as e:
+            logging.error(f"Debug check failed: {e}")
             
-        # Fallback to requests if OpenAI client fails
+        # Use requests directly for complete encoding control
         session = requests.Session()
         session.headers.update({
-            "Authorization": f"Bearer {OPENAI_API_KEY}"
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json; charset=utf-8"  # Explicitly set UTF-8
         })
 
+        # Manually encode the JSON payload to ensure UTF-8
+        json_payload = json.dumps(payload, ensure_ascii=True)  # Force ASCII in JSON
+        
         response = session.post(
             "https://api.openai.com/v1/chat/completions",
-            json=payload,  # lets requests set application/json and utf-8
+            data=json_payload.encode('utf-8'),
+            headers={"Content-Type": "application/json; charset=utf-8"},
             timeout=90
         )
 

@@ -1,0 +1,161 @@
+Looking at your code, you've done an excellent job handling encoding issues! Your implementation is quite robust with multiple layers of protection. However, I can see a few potential issues that might still cause the error:
+
+## Issues Found:
+
+### 1. **OpenAI Client Import Duplication**
+You're importing `OpenAI` twice and creating the client in two different ways:
+
+```python
+# At the top (line 7 and 47)
+from openai import OpenAI
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+# Inside the function (line 238-241)
+from openai import OpenAI
+client = OpenAI(api_key=OPENAI_API_KEY)
+```
+
+The `openai_client` at the top is never used, and you're creating a new client inside the function.
+
+### 2. **Potential Issue with OpenAI Client's Internal Encoding**
+The OpenAI Python client might have its own internal encoding handling that's not respecting your ASCII-cleaned text. The error message suggests the issue occurs within the OpenAI client itself.
+
+## Recommended Fixes:
+
+### Fix 1: Force UTF-8 in OpenAI Client
+```python
+def analyze_compliance(project_spec_text, vendor_submittal_text):
+    """
+    Analyze compliance between project specification and vendor submittal using OpenAI.
+    """
+    if not OPENAI_API_KEY:
+        raise ValueError(
+            "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
+        )
+
+    # Your existing clean_text function...
+    
+    project_spec_text = clean_text(project_spec_text)
+    vendor_submittal_text = clean_text(vendor_submittal_text)
+
+    user_message = f"""PROJECT_SPEC:
+{project_spec_text}
+
+---
+
+SUBMITTAL:
+{vendor_submittal_text}"""
+
+    try:
+        logging.info("Sending compliance analysis request to OpenAI...")
+
+        clean_system_prompt = clean_text(SYSTEM_PROMPT)
+        clean_user_message = clean_text(user_message)
+        
+        # Ensure the text is properly encoded as UTF-8 bytes then decoded
+        # This helps ensure the OpenAI client gets clean UTF-8 strings
+        clean_system_prompt = clean_system_prompt.encode('utf-8', errors='ignore').decode('utf-8')
+        clean_user_message = clean_user_message.encode('utf-8', errors='ignore').decode('utf-8')
+        
+        log_safe("Starting compliance analysis with system prompt length: ", str(len(clean_system_prompt)))
+        log_safe("User message length: ", str(len(clean_user_message)))
+
+        # Skip the OpenAI client and go straight to requests
+        # This gives you more control over encoding
+        session = requests.Session()
+        session.headers.update({
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json; charset=utf-8"  # Explicitly set UTF-8
+        })
+
+        payload = {
+            "model": "gpt-4",  # Note: gpt-5 doesn't exist yet, use gpt-4
+            "messages": [
+                {"role": "system", "content": clean_system_prompt},
+                {"role": "user", "content": clean_user_message}
+            ],
+            "temperature": 0,
+            "max_tokens": 8000
+        }
+
+        # Manually encode the JSON payload to ensure UTF-8
+        json_payload = json.dumps(payload, ensure_ascii=True)  # Force ASCII in JSON
+        
+        response = session.post(
+            "https://api.openai.com/v1/chat/completions",
+            data=json_payload.encode('utf-8'),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            timeout=90
+        )
+
+        if response.status_code != 200:
+            log_safe("OpenAI API error body: ", response.text)
+            raise Exception(f"OpenAI API error: {response.status_code}")
+
+        result_json = response.json()
+        result = result_json['choices'][0]['message']['content']
+        logging.info("Compliance analysis completed successfully")
+        return result
+
+    except Exception as e:
+        logging.error(f"OpenAI API error: {str(e)}")
+        raise Exception(f"Failed to analyze compliance: {str(e)}")
+```
+
+### Fix 2: Enhanced clean_text function
+Add more aggressive cleaning at the end of your `clean_text` function:
+
+```python
+def clean_text(text):
+    # ... existing code ...
+    
+    # Final aggressive cleanup - remove any remaining non-printable chars
+    import string
+    printable = set(string.printable)
+    text = ''.join(filter(lambda x: x in printable, text))
+    
+    # Remove any null bytes or control characters
+    text = text.replace('\x00', '')
+    text = ''.join(ch for ch in text if ord(ch) >= 32 or ch in '\n\r\t')
+    
+    return text
+```
+
+### Fix 3: Set Default Encoding for HTTP Client
+Add this near the top of your file:
+
+```python
+import locale
+locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+
+# For requests library
+import requests
+requests.models.Response.encoding = 'utf-8'
+```
+
+### Fix 4: Debug Enhancement
+Add more detailed debugging to identify exactly where the encoding issue occurs:
+
+```python
+try:
+    # Log the exact position where the issue occurs
+    for i, ch in enumerate(clean_user_message):
+        if ord(ch) > 127:
+            logging.error(f"Found non-ASCII at position {i}: {ch!r} (U+{ord(ch):04X})")
+            # Log context around the problematic character
+            start = max(0, i-20)
+            end = min(len(clean_user_message), i+20)
+            logging.error(f"Context: ...{clean_user_message[start:end]!r}...")
+            break
+except Exception as e:
+    logging.error(f"Debug check failed: {e}")
+```
+
+## Most Likely Solution:
+The error message shows position 11 with `\u2019`, which suggests your `clean_text` function might not be called on all text inputs, or there's text being added after cleaning. I recommend:
+
+1. **Skip the OpenAI Python client entirely** and use `requests` directly with `ensure_ascii=True` in `json.dumps()`
+2. **Verify the model name** - "gpt-5" doesn't exist; use "gpt-4" or "gpt-4-turbo"
+3. **Remove the duplicate OpenAI client code** at the top of the file
+
+The key insight is that the OpenAI Python client might be adding its own headers or processing that reintroduces Unicode characters. Using `requests` directly with `json.dumps(ensure_ascii=True)` gives you complete control over the encoding.
