@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Engineering Compliance Review System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 text-center">
+            <!-- Hero Section -->
+            <div class="hero-section mb-5">
+                <i class="fas fa-clipboard-check text-primary mb-3" style="font-size: 4rem;"></i>
+                <h1 class="display-4 fw-bold text-primary mb-3">Engineering Compliance Review System</h1>
+                <p class="lead text-muted mb-4">
+                    Automate technical review of vendor product specifications against project requirements using AI-powered analysis.
+                </p>
+            </div>
+
+            <!-- Features Grid -->
+            <div class="row mb-5">
+                <div class="col-md-4 mb-4">
+                    <div class="feature-card h-100 p-4 bg-light rounded-3">
+                        <i class="fas fa-file-pdf text-primary mb-3" style="font-size: 2.5rem;"></i>
+                        <h5 class="fw-bold">PDF Analysis</h5>
+                        <p class="text-muted">Upload project specifications and vendor submittals for automated analysis</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="feature-card h-100 p-4 bg-light rounded-3">
+                        <i class="fas fa-robot text-primary mb-3" style="font-size: 2.5rem;"></i>
+                        <h5 class="fw-bold">AI-Powered</h5>
+                        <p class="text-muted">Advanced AI generates comprehensive compliance reports with color-coded status</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="feature-card h-100 p-4 bg-light rounded-3">
+                        <i class="fas fa-download text-primary mb-3" style="font-size: 2.5rem;"></i>
+                        <h5 class="fw-bold">Professional Reports</h5>
+                        <p class="text-muted">Download detailed PDF reports with professional formatting and analysis</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Call to Action -->
+            <div class="cta-section p-5 bg-primary text-white rounded-3">
+                <h3 class="mb-3">Ready to Get Started?</h3>
+                <p class="mb-4">Sign in to access the compliance review system and start analyzing your technical specifications.</p>
+                <a href="{{ url_for('replit_auth.login') }}" class="btn btn-light btn-lg px-5">
+                    <i class="fas fa-sign-in-alt me-2"></i>Sign In to Continue
+                </a>
+            </div>
+
+            <!-- How It Works -->
+            <div class="how-it-works mt-5">
+                <h3 class="text-primary mb-4">How It Works</h3>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <div class="step-card text-center p-3">
+                            <div class="step-number bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 50px; height: 50px;">1</div>
+                            <h6 class="fw-bold">Upload PDFs</h6>
+                            <p class="small text-muted">Upload your project specification and vendor submittal documents</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="step-card text-center p-3">
+                            <div class="step-number bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 50px; height: 50px;">2</div>
+                            <h6 class="fw-bold">AI Analysis</h6>
+                            <p class="small text-muted">Our AI analyzes documents for compliance with requirements</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="step-card text-center p-3">
+                            <div class="step-number bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 50px; height: 50px;">3</div>
+                            <h6 class="fw-bold">Review Results</h6>
+                            <p class="small text-muted">View detailed compliance analysis with color-coded status</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="step-card text-center p-3">
+                            <div class="step-number bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 50px; height: 50px;">4</div>
+                            <h6 class="fw-bold">Download Report</h6>
+                            <p class="small text-muted">Get professional PDF reports for your records</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.feature-card {
+    transition: transform 0.3s ease;
+    border: 1px solid #e9ecef;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+}
+
+.cta-section {
+    background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+}
+
+.step-card {
+    transition: transform 0.3s ease;
+}
+
+.step-card:hover {
+    transform: translateY(-3px);
+}
+
+.hero-section {
+    padding: 2rem 0;
+}
+
+@media (max-width: 768px) {
+    .display-4 {
+        font-size: 2.5rem;
+    }
+    
+    .hero-section i {
+        font-size: 3rem !important;
+    }
+    
+    .feature-card i {
+        font-size: 2rem !important;
+    }
+}
+</style>
+{% endblock %}

@@ -1,13 +1,23 @@
 import os
 import logging
-from flask import render_template, request, flash, redirect, url_for, jsonify, make_response
+from flask import render_template, request, flash, redirect, url_for, jsonify, make_response, session
 from werkzeug.utils import secure_filename
+from flask_login import current_user
 from app import app, db
 from models import ComplianceReview
 from pdf_processor import extract_text_from_pdf
 from compliance_analyzer import analyze_compliance
 from pdf_generator import generate_compliance_pdf
+from replit_auth import require_login, make_replit_blueprint
 import uuid
+
+# Register authentication blueprint
+app.register_blueprint(make_replit_blueprint(), url_prefix="/auth")
+
+# Make session permanent
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
 
 ALLOWED_EXTENSIONS = {'pdf'}
 
@@ -16,10 +26,14 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
-    """Main page with file upload form"""
-    return render_template('index.html')
+    """Main page with file upload form or login landing"""
+    if current_user.is_authenticated:
+        return render_template('index.html')
+    else:
+        return render_template('landing.html')
 
 @app.route('/upload', methods=['POST'])
+@require_login
 def upload_files():
     """Handle file upload and initiate compliance analysis"""
     # Set a longer timeout for this specific route
@@ -60,6 +74,7 @@ def upload_files():
         review.project_spec_filename = project_spec_file.filename
         review.submittal_filename = vendor_submittal_file.filename
         review.status = 'pending'
+        review.user_id = current_user.id  # Associate with current user
         db.session.add(review)
         db.session.commit()
         
@@ -153,9 +168,12 @@ def upload_files():
             logging.info("=" * 80)
             logging.info("VERIFICATION AFTER DATABASE COMMIT:")
             fresh_review = ComplianceReview.query.get(review.id)
-            logging.info(f"Fresh review status: {fresh_review.status}")
-            logging.info(f"Fresh review report content length: {len(fresh_review.report_content) if fresh_review.report_content else 0}")
-            logging.info(f"Fresh review overall status: {fresh_review.overall_status}")
+            if fresh_review:
+                logging.info(f"Fresh review status: {fresh_review.status}")
+                logging.info(f"Fresh review report content length: {len(fresh_review.report_content) if fresh_review.report_content else 0}")
+                logging.info(f"Fresh review overall status: {fresh_review.overall_status}")
+            else:
+                logging.error("Could not retrieve fresh review from database!")
             logging.info("=" * 80)
             
             flash('Compliance analysis completed successfully!', 'success')
@@ -185,9 +203,10 @@ def upload_files():
         return redirect(url_for('index'))
 
 @app.route('/results/<int:review_id>')
+@require_login
 def view_results(review_id):
     """Display compliance analysis results"""
-    review = ComplianceReview.query.get_or_404(review_id)
+    review = ComplianceReview.query.filter_by(id=review_id, user_id=current_user.id).first_or_404()
     
     # Debug: Show what we're displaying
     logging.info("=" * 80)
@@ -214,9 +233,10 @@ def view_results(review_id):
     return render_template('results.html', review=review)
 
 @app.route('/download/<int:review_id>')
+@require_login
 def download_report(review_id):
     """Download compliance report as formatted PDF"""
-    review = ComplianceReview.query.get_or_404(review_id)
+    review = ComplianceReview.query.filter_by(id=review_id, user_id=current_user.id).first_or_404()
     
     if review.status != 'completed' or not review.report_content:
         flash('Report not available', 'error')
@@ -250,9 +270,10 @@ def download_report(review_id):
         return redirect(url_for('view_results', review_id=review_id))
 
 @app.route('/history')
+@require_login
 def view_history():
     """View past compliance reviews"""
-    reviews = ComplianceReview.query.order_by(ComplianceReview.created_at.desc()).limit(20).all()
+    reviews = ComplianceReview.query.filter_by(user_id=current_user.id).order_by(ComplianceReview.created_at.desc()).limit(20).all()
     return render_template('history.html', reviews=reviews)
 
 @app.errorhandler(413)

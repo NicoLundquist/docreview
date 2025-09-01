@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Access Denied{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 text-center">
+            <div class="error-page">
+                <i class="fas fa-exclamation-triangle text-warning mb-4" style="font-size: 4rem;"></i>
+                <h1 class="display-4 fw-bold text-dark mb-3">Access Denied</h1>
+                <p class="lead text-muted mb-4">
+                    There was an issue with the authentication process. Please try signing in again.
+                </p>
+                
+                <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                    <a href="{{ url_for('replit_auth.login') }}" class="btn btn-primary btn-lg px-4">
+                        <i class="fas fa-sign-in-alt me-2"></i>Sign In Again
+                    </a>
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-lg px-4">
+                        <i class="fas fa-home me-2"></i>Go Home
+                    </a>
+                </div>
+                
+                <div class="mt-5 p-4 bg-light rounded-3">
+                    <h6 class="fw-bold mb-2">Need Help?</h6>
+                    <p class="text-muted mb-0">
+                        If you continue to experience issues, please try clearing your browser cache or contact support.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-page {
+    padding: 2rem 0;
+}
+
+@media (max-width: 768px) {
+    .display-4 {
+        font-size: 2.5rem;
+    }
+    
+    .error-page i {
+        font-size: 3rem !important;
+    }
+}
+</style>
+{% endblock %}
