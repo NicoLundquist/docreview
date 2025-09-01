@@ -316,7 +316,7 @@ SUBMITTAL:
         # STEP 3 - Prepare the payload
         logging.info("STEP 3 - Preparing JSON payload...")
         payload = {
-            "model": "gpt-4",  # Use gpt-4 since gpt-5 doesn't exist yet
+            "model": "gpt-5",  # Use gpt-4 since gpt-5 doesn't exist yet
             "messages": [
                 {"role": "system", "content": clean_system_prompt},
                 {"role": "user", "content": clean_user_message}
