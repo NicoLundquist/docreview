@@ -292,11 +292,29 @@ SUBMITTAL:
         clean_system_prompt = clean_system_prompt.encode('utf-8', errors='ignore').decode('utf-8')
         clean_user_message = clean_user_message.encode('utf-8', errors='ignore').decode('utf-8')
         
-        # Use safe logging for debugging if needed
-        log_safe("Starting compliance analysis with system prompt length: ", str(len(clean_system_prompt)))
-        log_safe("User message length: ", str(len(clean_user_message)))
+        # STEP 1 - Debug initial cleaning
+        log_safe("STEP 1 - Initial cleaning complete. System prompt length: ", str(len(clean_system_prompt)))
+        log_safe("STEP 1 - User message length: ", str(len(clean_user_message)))
+        
+        # Debug: Check for Unicode in original SYSTEM_PROMPT
+        logging.info("DEBUG: Checking raw SYSTEM_PROMPT for Unicode...")
+        for i, ch in enumerate(SYSTEM_PROMPT[:50]):
+            if ord(ch) > 127:
+                logging.error(f"FOUND UNICODE IN RAW SYSTEM_PROMPT at position {i}: {ch!r} (U+{ord(ch):04X})")
+                break
+        
+        # Debug: Check for Unicode in cleaned system prompt
+        logging.info("DEBUG: Checking cleaned system prompt for Unicode...")
+        for i, ch in enumerate(clean_system_prompt[:50]):
+            if ord(ch) > 127:
+                logging.error(f"FOUND UNICODE IN CLEANED SYSTEM_PROMPT at position {i}: {ch!r} (U+{ord(ch):04X})")
+                break
 
-        # Prepare the payload 
+        log_safe("STEP 2 - UTF-8 encoding/decoding complete. System prompt length: ", str(len(clean_system_prompt)))
+        log_safe("STEP 2 - User message length: ", str(len(clean_user_message)))
+
+        # STEP 3 - Prepare the payload
+        logging.info("STEP 3 - Preparing JSON payload...")
         payload = {
             "model": "gpt-4",  # Use gpt-4 since gpt-5 doesn't exist yet
             "messages": [
@@ -306,6 +324,24 @@ SUBMITTAL:
             "temperature": 0,
             "max_tokens": 8000
         }
+        
+        # Comprehensive debugging - check every string in payload
+        logging.info("DEBUG: Checking all payload strings for Unicode...")
+        for key, value in payload.items():
+            if isinstance(value, str):
+                for i, ch in enumerate(value):
+                    if ord(ch) > 127:
+                        logging.error(f"FOUND UNICODE IN PAYLOAD[{key}] at position {i}: {ch!r} (U+{ord(ch):04X})")
+                        break
+            elif isinstance(value, list):
+                for idx, item in enumerate(value):
+                    if isinstance(item, dict):
+                        for sub_key, sub_value in item.items():
+                            if isinstance(sub_value, str):
+                                for i, ch in enumerate(sub_value):
+                                    if ord(ch) > 127:
+                                        logging.error(f"FOUND UNICODE IN PAYLOAD[{key}][{idx}][{sub_key}] at position {i}: {ch!r} (U+{ord(ch):04X})")
+                                        break
 
         # Assertion to verify ASCII-only content
         def assert_ascii(s, label=""):
@@ -317,35 +353,66 @@ SUBMITTAL:
         assert_ascii(clean_system_prompt, "system")
         assert_ascii(clean_user_message, "user")
 
-        # Enhanced debugging - check for any remaining non-ASCII characters
+        # STEP 4 - Final check for non-ASCII characters
+        logging.info("DEBUG: Final check for non-ASCII characters...")
         try:
             for i, ch in enumerate(clean_user_message):
                 if ord(ch) > 127:
-                    logging.error(f"Found non-ASCII at position {i}: {ch!r} (U+{ord(ch):04X})")
+                    logging.error(f"Found non-ASCII in clean_user_message at position {i}: {ch!r} (U+{ord(ch):04X})")
                     # Log context around the problematic character
                     start = max(0, i-20)
                     end = min(len(clean_user_message), i+20)
                     logging.error(f"Context: ...{clean_user_message[start:end]!r}...")
                     break
+            
+            for i, ch in enumerate(clean_system_prompt):
+                if ord(ch) > 127:
+                    logging.error(f"Found non-ASCII in clean_system_prompt at position {i}: {ch!r} (U+{ord(ch):04X})")
+                    # Log context around the problematic character
+                    start = max(0, i-20)
+                    end = min(len(clean_system_prompt), i+20)
+                    logging.error(f"Context: ...{clean_system_prompt[start:end]!r}...")
+                    break
         except Exception as e:
             logging.error(f"Debug check failed: {e}")
             
-        # Use requests directly for complete encoding control
+        # STEP 5 - Use requests directly for complete encoding control
+        logging.info("STEP 5 - Creating HTTP session...")
         session = requests.Session()
         session.headers.update({
             "Authorization": f"Bearer {OPENAI_API_KEY}",
             "Content-Type": "application/json; charset=utf-8"  # Explicitly set UTF-8
         })
 
-        # Manually encode the JSON payload to ensure UTF-8
-        json_payload = json.dumps(payload, ensure_ascii=True)  # Force ASCII in JSON
+        # STEP 6 - Manually encode the JSON payload to ensure UTF-8
+        logging.info("STEP 6 - Encoding JSON payload...")
+        try:
+            json_payload = json.dumps(payload, ensure_ascii=True)  # Force ASCII in JSON
+            logging.info(f"STEP 6 - JSON payload created successfully. Length: {len(json_payload)}")
+            logging.info(f"STEP 6 - First 200 chars of JSON: {json_payload[:200]}")
+        except Exception as json_error:
+            logging.error(f"STEP 6 - JSON encoding failed: {json_error}")
+            # Try to identify which field caused the issue
+            for key, value in payload.items():
+                try:
+                    test_json = json.dumps({key: value}, ensure_ascii=True)
+                    logging.info(f"STEP 6 - Field '{key}' encoded successfully")
+                except Exception as field_error:
+                    logging.error(f"STEP 6 - Field '{key}' failed to encode: {field_error}")
+            raise
         
-        response = session.post(
-            "https://api.openai.com/v1/chat/completions",
-            data=json_payload.encode('utf-8'),
-            headers={"Content-Type": "application/json; charset=utf-8"},
-            timeout=90
-        )
+        logging.info("STEP 7 - Making HTTP request...")
+        try:
+            response = session.post(
+                "https://api.openai.com/v1/chat/completions",
+                data=json_payload.encode('utf-8'),
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                timeout=90
+            )
+            logging.info(f"STEP 7 - HTTP request completed. Status: {response.status_code}")
+        except Exception as http_error:
+            logging.error(f"STEP 7 - HTTP request failed: {http_error}")
+            raise
 
         if response.status_code != 200:
             # Avoid logging raw response.text if your sink is not UTF-8
