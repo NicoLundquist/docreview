@@ -316,7 +316,7 @@ SUBMITTAL:
         # STEP 3 - Prepare the payload
         logging.info("STEP 3 - Preparing JSON payload...")
         payload = {
-            "model": "gpt-4o",  # Use gpt-4o which has 128K token context window for large documents
+            "model": "gpt-5",  # the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
             "messages": [
                 {"role": "system", "content": clean_system_prompt},
                 {"role": "user", "content": clean_user_message}
