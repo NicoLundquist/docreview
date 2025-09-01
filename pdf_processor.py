@@ -1,59 +1,9 @@
 import logging
 import pdfplumber
-import PyPDF2
-
-def extract_text_from_pdf_simple(pdf_path: str) -> str:
-    """
-    Simple PDF text extraction with minimal processing and strict limits
-    """
-    import pdfplumber
-    import time
-    
-    extracted_text = ""
-    start_time = time.time()
-    max_processing_time = 15  # 15 second timeout per PDF
-    max_pages = 10  # Even stricter page limit
-    
-    try:
-        with pdfplumber.open(pdf_path) as pdf:
-            total_pages = min(len(pdf.pages), max_pages)
-            logging.info(f"Processing PDF with {len(pdf.pages)} pages (limiting to {total_pages})")
-            
-            for page_num, page in enumerate(pdf.pages[:total_pages], 1):
-                # Check timeout
-                if time.time() - start_time > max_processing_time:
-                    extracted_text += f"\n--- PROCESSING TIMEOUT: Only {page_num-1} pages processed ---\n"
-                    break
-                    
-                try:
-                    # Minimal text extraction with timeout check
-                    page_text = page.extract_text(layout=False, x_tolerance=3, y_tolerance=3)
-                    if page_text and page_text.strip():
-                        # Limit text length per page to prevent memory issues
-                        if len(page_text) > 5000:
-                            page_text = page_text[:5000] + "... [TRUNCATED]"
-                        
-                        extracted_text += f"\n--- PAGE {page_num} ---\n"
-                        extracted_text += page_text.strip()
-                        extracted_text += "\n"
-                    else:
-                        extracted_text += f"\n--- PAGE {page_num} (NO TEXT) ---\n"
-                except:
-                    extracted_text += f"\n--- PAGE {page_num} (EXTRACTION FAILED) ---\n"
-                    continue
-                    
-            if len(pdf.pages) > max_pages:
-                extracted_text += f"\n--- NOTE: Only first {max_pages} pages processed (total: {len(pdf.pages)} pages) ---\n"
-                
-    except Exception as e:
-        raise Exception(f"Failed to open PDF: {str(e)}")
-    
-    return extracted_text
-
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
-    Extract text content from a PDF file using multiple fallback methods
+    Extract text content from a PDF file using pdfplumber
     
     Args:
         pdf_path (str): Path to the PDF file
@@ -67,86 +17,43 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     try:
         logging.info(f"Starting text extraction from PDF: {pdf_path}")
         
-        # First try simple extraction method
-        try:
-            extracted_text = extract_text_from_pdf_simple(pdf_path)
-            if extracted_text.strip():
-                logging.info(f"Successfully extracted text using simple method")
-                return extracted_text.strip()
-        except Exception as e:
-            logging.warning(f"Simple extraction failed: {str(e)}")
-        
-        # Fallback to basic pdfplumber with minimal settings
         extracted_text = ""
         
-        try:
-            with pdfplumber.open(pdf_path, laparams={"detect_vertical": False, "word_margin": 0.1}) as pdf:
-                total_pages = len(pdf.pages)
-                logging.info(f"PDF has {total_pages} pages - using fallback method")
-                
-                # Limit to first 5 pages to prevent memory issues
-                max_pages = min(total_pages, 5)
-                
-                for page_num in range(1, max_pages + 1):
-                    try:
-                        page = pdf.pages[page_num - 1]
-                        
-                        # Basic text extraction only
-                        page_text = page.extract_text(layout=False)
-                        
-                        if page_text and page_text.strip():
-                            extracted_text += f"\n--- PAGE {page_num} ---\n"
-                            extracted_text += page_text.strip()
-                            extracted_text += "\n"
-                        else:
-                            extracted_text += f"\n--- PAGE {page_num} (NO TEXT FOUND) ---\n"
-                        
-                        logging.info(f"Processed page {page_num}/{max_pages}")
-                        
-                    except Exception as page_error:
-                        logging.warning(f"Error processing page {page_num}: {str(page_error)}")
-                        extracted_text += f"\n--- PAGE {page_num} (ERROR PROCESSING) ---\n"
-                        continue
-                
-                if total_pages > 20:
-                    extracted_text += f"\n--- NOTE: Only first 20 pages processed (total: {total_pages} pages) ---\n"
+        with pdfplumber.open(pdf_path) as pdf:
+            total_pages = len(pdf.pages)
+            logging.info(f"PDF has {total_pages} pages")
+            
+            for page_num, page in enumerate(pdf.pages, 1):
+                try:
+                    # Extract text from the page
+                    page_text = page.extract_text()
                     
-        except Exception as pdf_error:
-            logging.warning(f"Pdfplumber processing failed: {str(pdf_error)}")
-        
-        # Final fallback: use PyPDF2 for basic text extraction
-        if not extracted_text.strip():
-            try:
-                logging.info("Trying PyPDF2 as final fallback...")
-                with open(pdf_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
-                    for page_num, page in enumerate(pdf_reader.pages, 1):
-                        try:
-                            page_text = page.extract_text()
-                            if page_text and page_text.strip():
-                                extracted_text += f"\n--- PAGE {page_num} ---\n"
-                                extracted_text += page_text.strip()
-                                extracted_text += "\n"
-                            
-                            # Limit to 5 pages to prevent memory issues
-                            if page_num >= 5:
-                                if len(pdf_reader.pages) > 5:
-                                    extracted_text += f"\n--- NOTE: Only first 5 pages processed (total: {len(pdf_reader.pages)} pages) ---\n"
-                                break
-                                
-                        except Exception as page_error:
-                            logging.warning(f"PyPDF2 error on page {page_num}: {str(page_error)}")
-                            extracted_text += f"\n--- PAGE {page_num} (PYPDF2 EXTRACTION FAILED) ---\n"
-                            continue
-                            
-                    if extracted_text.strip():
-                        logging.info("Successfully extracted text using PyPDF2 fallback")
+                    if page_text:
+                        # Add page marker for reference
+                        extracted_text += f"\n--- PAGE {page_num} ---\n"
+                        extracted_text += page_text
                         
-            except Exception as pypdf_error:
-                logging.error(f"PyPDF2 processing failed: {str(pypdf_error)}")
+                        # Try to extract table data if present
+                        tables = page.extract_tables()
+                        if tables:
+                            extracted_text += f"\n--- TABLES ON PAGE {page_num} ---\n"
+                            for table_num, table in enumerate(tables, 1):
+                                extracted_text += f"\nTable {table_num}:\n"
+                                for row in table:
+                                    if row:
+                                        # Filter out None values and join
+                                        clean_row = [str(cell) if cell is not None else "" for cell in row]
+                                        extracted_text += " | ".join(clean_row) + "\n"
+                    
+                    logging.debug(f"Processed page {page_num}/{total_pages}")
+                    
+                except Exception as page_error:
+                    logging.warning(f"Error processing page {page_num}: {str(page_error)}")
+                    extracted_text += f"\n--- PAGE {page_num} (ERROR PROCESSING) ---\n"
+                    continue
         
         if not extracted_text.strip():
-            raise ValueError("No text content could be extracted from the PDF using any method")
+            raise ValueError("No text content could be extracted from the PDF")
         
         logging.info(f"Successfully extracted {len(extracted_text)} characters from PDF")
         return extracted_text.strip()
