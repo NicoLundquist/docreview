@@ -60,12 +60,18 @@ def upload_files():
         db.session.commit()
         
         try:
-            # Extract text from PDFs
+            # Extract text from PDFs with timeout protection
             logging.info("Extracting text from Project Specification...")
-            project_spec_text = extract_text_from_pdf(project_spec_path)
+            try:
+                project_spec_text = extract_text_from_pdf(project_spec_path)
+            except Exception as e:
+                raise ValueError(f"Failed to process Project Specification PDF: {str(e)}")
             
             logging.info("Extracting text from Vendor Submittal...")
-            vendor_submittal_text = extract_text_from_pdf(vendor_submittal_path)
+            try:
+                vendor_submittal_text = extract_text_from_pdf(vendor_submittal_path)
+            except Exception as e:
+                raise ValueError(f"Failed to process Vendor Submittal PDF: {str(e)}")
             
             if not project_spec_text.strip():
                 raise ValueError("Could not extract text from Project Specification PDF")

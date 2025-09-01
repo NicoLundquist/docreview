@@ -19,14 +19,24 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         
         extracted_text = ""
         
-        with pdfplumber.open(pdf_path) as pdf:
+        # Use timeout and error handling for PDF processing
+        with pdfplumber.open(pdf_path, laparams={"detect_vertical": False}) as pdf:
             total_pages = len(pdf.pages)
             logging.info(f"PDF has {total_pages} pages")
             
             for page_num, page in enumerate(pdf.pages, 1):
                 try:
-                    # Extract text from the page
-                    page_text = page.extract_text()
+                    # Extract text from the page with error handling
+                    page_text = None
+                    try:
+                        page_text = page.extract_text()
+                    except Exception as extract_error:
+                        logging.warning(f"Text extraction failed on page {page_num}: {str(extract_error)}")
+                        # Try alternative extraction method
+                        try:
+                            page_text = page.extract_text(layout=False)
+                        except:
+                            page_text = None
                     
                     if page_text:
                         # Add page marker for reference
@@ -34,18 +44,23 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                         extracted_text += page_text
                         
                         # Try to extract table data if present
-                        tables = page.extract_tables()
-                        if tables:
-                            extracted_text += f"\n--- TABLES ON PAGE {page_num} ---\n"
-                            for table_num, table in enumerate(tables, 1):
-                                extracted_text += f"\nTable {table_num}:\n"
-                                for row in table:
-                                    if row:
-                                        # Filter out None values and join
-                                        clean_row = [str(cell) if cell is not None else "" for cell in row]
-                                        extracted_text += " | ".join(clean_row) + "\n"
+                        try:
+                            tables = page.extract_tables()
+                            if tables:
+                                extracted_text += f"\n--- TABLES ON PAGE {page_num} ---\n"
+                                for table_num, table in enumerate(tables, 1):
+                                    extracted_text += f"\nTable {table_num}:\n"
+                                    for row in table:
+                                        if row:
+                                            # Filter out None values and join
+                                            clean_row = [str(cell) if cell is not None else "" for cell in row]
+                                            extracted_text += " | ".join(clean_row) + "\n"
+                        except Exception as table_error:
+                            logging.warning(f"Table extraction failed on page {page_num}: {str(table_error)}")
+                    else:
+                        extracted_text += f"\n--- PAGE {page_num} (TEXT EXTRACTION FAILED) ---\n"
                     
-                    logging.debug(f"Processed page {page_num}/{total_pages}")
+                    logging.info(f"Processed page {page_num}/{total_pages}")
                     
                 except Exception as page_error:
                     logging.warning(f"Error processing page {page_num}: {str(page_error)}")
