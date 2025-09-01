@@ -316,13 +316,13 @@ SUBMITTAL:
         # STEP 3 - Prepare the payload
         logging.info("STEP 3 - Preparing JSON payload...")
         payload = {
-            "model": "gpt-5",  # Use gpt-4 since gpt-5 doesn't exist yet
+            "model": "gpt-4o",  # Use gpt-4o which has 128K token context window for large documents
             "messages": [
                 {"role": "system", "content": clean_system_prompt},
                 {"role": "user", "content": clean_user_message}
             ],
             "temperature": 0,
-            "max_tokens": 8000
+            "max_completion_tokens": 8000
         }
         
         # Comprehensive debugging - check every string in payload
