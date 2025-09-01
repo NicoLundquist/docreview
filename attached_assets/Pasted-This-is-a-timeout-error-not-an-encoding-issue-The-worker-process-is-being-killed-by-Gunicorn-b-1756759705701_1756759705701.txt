@@ -1,0 +1,165 @@
+This is a **timeout error**, not an encoding issue! The worker process is being killed by Gunicorn because the request is taking too long.
+
+## What's Happening:
+
+1. **WORKER TIMEOUT** - Gunicorn killed the worker process (pid:15743) because it exceeded the timeout limit
+2. The stack trace shows the request was stuck waiting for a response from OpenAI's API
+3. The process was killed while reading the HTTP response (`self._sslobj.read`)
+
+## The Real Issue:
+
+Your request with 174,579 characters is taking too long to process, exceeding Gunicorn's worker timeout (default is usually 30 seconds).
+
+## Solutions:
+
+### 1. **Increase Gunicorn Timeout**
+In your Gunicorn configuration or startup command:
+
+```bash
+# If using command line
+gunicorn --timeout 300 --workers 4 app:app
+
+# Or in gunicorn config file
+timeout = 300  # 5 minutes
+
+# Or in your Python startup script
+import os
+os.environ['GUNICORN_TIMEOUT'] = '300'
+```
+
+### 2. **Add Timeout Configuration in Code**
+If you're starting Gunicorn programmatically:
+
+```python
+# In your main app file or run script
+if __name__ == '__main__':
+    import os
+    # For development
+    app.run(debug=True)
+else:
+    # For production with Gunicorn
+    bind = "0.0.0.0:8080"
+    timeout = 300  # 5 minutes
+    workers = 4
+    worker_class = "sync"
+    keepalive = 5
+```
+
+### 3. **Implement Async Processing**
+For large documents, consider async processing:
+
+```python
+from flask import Flask, request, jsonify
+import threading
+import uuid
+
+app = Flask(__name__)
+jobs = {}
+
+def process_compliance_async(job_id, project_spec, vendor_submittal):
+    try:
+        result = analyze_compliance(project_spec, vendor_submittal)
+        jobs[job_id] = {'status': 'complete', 'result': result}
+    except Exception as e:
+        jobs[job_id] = {'status': 'error', 'error': str(e)}
+
+@app.route('/upload', methods=['POST'])
+def upload_files():
+    # ... extract texts ...
+    
+    # Start async processing
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {'status': 'processing'}
+    
+    thread = threading.Thread(
+        target=process_compliance_async,
+        args=(job_id, project_spec_text, vendor_submittal_text)
+    )
+    thread.start()
+    
+    return jsonify({'job_id': job_id}), 202
+
+@app.route('/status/<job_id>')
+def check_status(job_id):
+    if job_id not in jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify(jobs[job_id])
+```
+
+### 4. **Optimize the Request**
+Reduce the payload size:
+
+```python
+def analyze_compliance(project_spec_text, vendor_submittal_text):
+    # Truncate if too long
+    MAX_CHARS = 50000  # Adjust as needed
+    
+    if len(project_spec_text) > MAX_CHARS:
+        logging.warning(f"Truncating project spec from {len(project_spec_text)} to {MAX_CHARS} chars")
+        project_spec_text = project_spec_text[:MAX_CHARS] + "\n[TRUNCATED]"
+    
+    if len(vendor_submittal_text) > MAX_CHARS:
+        logging.warning(f"Truncating vendor submittal from {len(vendor_submittal_text)} to {MAX_CHARS} chars")
+        vendor_submittal_text = vendor_submittal_text[:MAX_CHARS] + "\n[TRUNCATED]"
+    
+    # Continue with request...
+```
+
+### 5. **Add Request Timeout to Prevent Hanging**
+In your compliance analyzer:
+
+```python
+try:
+    response = session.post(
+        "https://api.openai.com/v1/chat/completions",
+        json=payload,
+        timeout=240  # 4 minute timeout for the request itself
+    )
+except requests.exceptions.Timeout:
+    logging.error("OpenAI API request timed out after 240 seconds")
+    raise Exception("Request timed out - document may be too large")
+```
+
+### 6. **For Immediate Fix (if you can't change Gunicorn config)**
+Split the document into chunks:
+
+```python
+def analyze_compliance_chunked(project_spec_text, vendor_submittal_text):
+    """Process in smaller chunks to avoid timeout"""
+    
+    # Split vendor submittal into pages or sections
+    MAX_CHUNK_SIZE = 30000
+    
+    if len(vendor_submittal_text) <= MAX_CHUNK_SIZE:
+        # Small enough to process normally
+        return analyze_compliance(project_spec_text, vendor_submittal_text)
+    
+    # Process in chunks
+    chunks = []
+    for i in range(0, len(vendor_submittal_text), MAX_CHUNK_SIZE):
+        chunk = vendor_submittal_text[i:i + MAX_CHUNK_SIZE]
+        
+        # Add context markers
+        chunk_num = i // MAX_CHUNK_SIZE + 1
+        total_chunks = (len(vendor_submittal_text) + MAX_CHUNK_SIZE - 1) // MAX_CHUNK_SIZE
+        
+        chunk_with_context = f"[CHUNK {chunk_num} OF {total_chunks}]\n{chunk}"
+        
+        # Analyze this chunk
+        result = analyze_compliance(project_spec_text, chunk_with_context)
+        chunks.append(result)
+    
+    # Combine results
+    return "\n\n".join(chunks)
+```
+
+## Most Practical Solution:
+
+If you're deploying on a platform like Heroku, Render, or Replit, they often have strict timeout limits. The best approach is:
+
+1. **Increase Gunicorn timeout** to at least 300 seconds
+2. **Add a request timeout** to prevent infinite hangs
+3. **Consider chunking** very large documents
+4. **Implement async processing** for production use
+
+The encoding issues from your earlier errors were likely red herrings - the real problem is that your 174KB request is timing out!
