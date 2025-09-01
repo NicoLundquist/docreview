@@ -1,14 +1,26 @@
 import os
+import sys
 import logging
 from openai import OpenAI
 import locale
 
+# Force UTF-8 encoding throughout the application
+import codecs
+sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 # Set UTF-8 encoding for the environment
 os.environ['PYTHONIOENCODING'] = 'utf-8'
+os.environ['LC_ALL'] = 'C.UTF-8'
+os.environ['LANG'] = 'C.UTF-8'
+
 try:
-    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
 except:
-    pass  # Ignore if locale is not available
+    try:
+        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    except:
+        pass  # Ignore if locale is not available
 
 # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
 # do not change this unless explicitly requested by the user
@@ -196,20 +208,38 @@ def analyze_compliance(project_spec_text, vendor_submittal_text):
         raise ValueError("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.")
     
     # Prepare the user message with both documents, ensuring proper encoding
-    # Clean up any problematic characters
+    # Clean up any problematic characters and make everything ASCII-safe
     def clean_text(text):
-        # Ensure text is properly encoded as UTF-8
+        # Ensure text is properly encoded
         if isinstance(text, str):
-            # Replace common problematic characters
-            text = text.replace('\u2019', "'")  # Replace right single quotation mark
-            text = text.replace('\u2018', "'")  # Replace left single quotation mark
-            text = text.replace('\u201c', '"')  # Replace left double quotation mark
-            text = text.replace('\u201d', '"')  # Replace right double quotation mark
-            text = text.replace('\u2013', '-')  # Replace en dash
-            text = text.replace('\u2014', '--') # Replace em dash
-            text = text.replace('\u2026', '...')  # Replace ellipsis
-            # Ensure the text is valid UTF-8
-            text = text.encode('utf-8', errors='replace').decode('utf-8')
+            # Replace all common Unicode characters with ASCII equivalents
+            replacements = {
+                '\u2019': "'",  # Right single quotation mark
+                '\u2018': "'",  # Left single quotation mark
+                '\u201c': '"',  # Left double quotation mark
+                '\u201d': '"',  # Right double quotation mark
+                '\u2013': '-',  # En dash
+                '\u2014': '--', # Em dash
+                '\u2026': '...',  # Ellipsis
+                '\u00b0': ' degrees',  # Degree symbol
+                '\u00bd': '1/2',  # Half symbol
+                '\u00bc': '1/4',  # Quarter symbol
+                '\u00be': '3/4',  # Three quarters
+                '\u2022': '*',  # Bullet point
+                '\u2265': '>=',  # Greater than or equal
+                '\u2264': '<=',  # Less than or equal
+                '\u00d7': 'x',  # Multiplication sign
+                '\u00f7': '/',  # Division sign
+                '\u03bc': 'u',  # Micro sign (mu)
+                '\u00b1': '+/-',  # Plus-minus sign
+            }
+            
+            for unicode_char, ascii_char in replacements.items():
+                text = text.replace(unicode_char, ascii_char)
+            
+            # Remove any remaining non-ASCII characters
+            text = text.encode('ascii', errors='ignore').decode('ascii')
+            
         return text
     
     project_spec_text = clean_text(project_spec_text)
