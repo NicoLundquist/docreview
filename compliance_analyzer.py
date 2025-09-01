@@ -324,9 +324,9 @@ SUBMITTAL:
             "messages": [
                 {"role": "system", "content": clean_system_prompt},
                 {"role": "user", "content": clean_user_message}
-            ],
-            # temperature removed - GPT-5 only supports default value of 1
-            "max_completion_tokens": 8000
+            ]
+            # Removed max_completion_tokens to allow unlimited response length
+            # Removed temperature setting - GPT-5 uses default value of 1
         }
         
         # Comprehensive debugging - check every string in payload
@@ -436,6 +436,40 @@ SUBMITTAL:
             raise Exception(f"OpenAI API error: {response.status_code}")
 
         result_json = response.json()
+        
+        # Debug: Show the complete API response structure
+        logging.info("=" * 80)
+        logging.info("FULL OPENAI API RESPONSE STRUCTURE:")
+        logging.info("=" * 80)
+        logging.info(f"Response keys: {list(result_json.keys())}")
+        if 'choices' in result_json:
+            logging.info(f"Number of choices: {len(result_json['choices'])}")
+            if result_json['choices']:
+                choice = result_json['choices'][0]
+                logging.info(f"First choice keys: {list(choice.keys())}")
+                if 'message' in choice:
+                    message = choice['message']
+                    logging.info(f"Message keys: {list(message.keys())}")
+                    logging.info(f"Message role: {message.get('role', 'N/A')}")
+                    content = message.get('content', '')
+                    logging.info(f"Content length: {len(content)}")
+                    logging.info(f"Content type: {type(content)}")
+                    if content:
+                        logging.info(f"Content first 200 chars: {content[:200]}")
+                    else:
+                        logging.info("CONTENT IS EMPTY OR NULL!")
+                else:
+                    logging.info("No 'message' key in choice!")
+            else:
+                logging.info("Choices array is empty!")
+        else:
+            logging.info("No 'choices' key in response!")
+        
+        if 'usage' in result_json:
+            logging.info(f"Token usage: {result_json['usage']}")
+        
+        logging.info("=" * 80)
+        
         result = result_json['choices'][0]['message']['content']
         logging.info("Compliance analysis completed successfully")
         
