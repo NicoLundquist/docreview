@@ -408,7 +408,7 @@ SUBMITTAL:
                 "https://api.openai.com/v1/chat/completions",
                 data=json_payload,  # Pass the JSON string directly, let requests encode it
                 headers={"Content-Type": "application/json; charset=utf-8"},
-                timeout=90
+                timeout=480  # 8 minutes for GPT-5 processing
             )
             logging.info(f"STEP 7 - HTTP request completed. Status: {response.status_code}")
         except Exception as http_error:
@@ -419,7 +419,7 @@ SUBMITTAL:
                 response = session.post(
                     "https://api.openai.com/v1/chat/completions",
                     json=payload,  # Let requests handle JSON encoding completely
-                    timeout=90
+                    timeout=480  # 8 minutes for GPT-5 processing
                 )
                 logging.info(f"STEP 7 - Alternative approach succeeded. Status: {response.status_code}")
             except Exception as alt_error:
