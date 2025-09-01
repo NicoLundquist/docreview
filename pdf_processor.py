@@ -4,24 +4,47 @@ import PyPDF2
 
 def extract_text_from_pdf_simple(pdf_path: str) -> str:
     """
-    Simple PDF text extraction with minimal processing to avoid memory issues
+    Simple PDF text extraction with minimal processing and strict limits
     """
     import pdfplumber
+    import time
     
     extracted_text = ""
+    start_time = time.time()
+    max_processing_time = 15  # 15 second timeout per PDF
+    max_pages = 10  # Even stricter page limit
+    
     try:
         with pdfplumber.open(pdf_path) as pdf:
-            for page_num, page in enumerate(pdf.pages, 1):
+            total_pages = min(len(pdf.pages), max_pages)
+            logging.info(f"Processing PDF with {len(pdf.pages)} pages (limiting to {total_pages})")
+            
+            for page_num, page in enumerate(pdf.pages[:total_pages], 1):
+                # Check timeout
+                if time.time() - start_time > max_processing_time:
+                    extracted_text += f"\n--- PROCESSING TIMEOUT: Only {page_num-1} pages processed ---\n"
+                    break
+                    
                 try:
-                    # Simple text extraction without complex layout analysis
-                    page_text = page.extract_text(layout=False, x_tolerance=2, y_tolerance=2)
+                    # Minimal text extraction with timeout check
+                    page_text = page.extract_text(layout=False, x_tolerance=3, y_tolerance=3)
                     if page_text and page_text.strip():
+                        # Limit text length per page to prevent memory issues
+                        if len(page_text) > 5000:
+                            page_text = page_text[:5000] + "... [TRUNCATED]"
+                        
                         extracted_text += f"\n--- PAGE {page_num} ---\n"
                         extracted_text += page_text.strip()
                         extracted_text += "\n"
+                    else:
+                        extracted_text += f"\n--- PAGE {page_num} (NO TEXT) ---\n"
                 except:
                     extracted_text += f"\n--- PAGE {page_num} (EXTRACTION FAILED) ---\n"
                     continue
+                    
+            if len(pdf.pages) > max_pages:
+                extracted_text += f"\n--- NOTE: Only first {max_pages} pages processed (total: {len(pdf.pages)} pages) ---\n"
+                
     except Exception as e:
         raise Exception(f"Failed to open PDF: {str(e)}")
     
@@ -61,8 +84,8 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                 total_pages = len(pdf.pages)
                 logging.info(f"PDF has {total_pages} pages - using fallback method")
                 
-                # Limit to first 20 pages to prevent memory issues
-                max_pages = min(total_pages, 20)
+                # Limit to first 5 pages to prevent memory issues
+                max_pages = min(total_pages, 5)
                 
                 for page_num in range(1, max_pages + 1):
                     try:
@@ -105,10 +128,10 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                                 extracted_text += page_text.strip()
                                 extracted_text += "\n"
                             
-                            # Limit to 20 pages to prevent memory issues
-                            if page_num >= 20:
-                                if len(pdf_reader.pages) > 20:
-                                    extracted_text += f"\n--- NOTE: Only first 20 pages processed (total: {len(pdf_reader.pages)} pages) ---\n"
+                            # Limit to 5 pages to prevent memory issues
+                            if page_num >= 5:
+                                if len(pdf_reader.pages) > 5:
+                                    extracted_text += f"\n--- NOTE: Only first 5 pages processed (total: {len(pdf_reader.pages)} pages) ---\n"
                                 break
                                 
                         except Exception as page_error:
