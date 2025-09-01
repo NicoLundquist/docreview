@@ -403,16 +403,28 @@ SUBMITTAL:
         
         logging.info("STEP 7 - Making HTTP request...")
         try:
+            # Let requests handle the encoding - don't double-encode
             response = session.post(
                 "https://api.openai.com/v1/chat/completions",
-                data=json_payload.encode('utf-8'),
+                data=json_payload,  # Pass the JSON string directly, let requests encode it
                 headers={"Content-Type": "application/json; charset=utf-8"},
                 timeout=90
             )
             logging.info(f"STEP 7 - HTTP request completed. Status: {response.status_code}")
         except Exception as http_error:
             logging.error(f"STEP 7 - HTTP request failed: {http_error}")
-            raise
+            # Try alternative approach with json parameter
+            logging.info("STEP 7 - Trying alternative approach with json parameter...")
+            try:
+                response = session.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    json=payload,  # Let requests handle JSON encoding completely
+                    timeout=90
+                )
+                logging.info(f"STEP 7 - Alternative approach succeeded. Status: {response.status_code}")
+            except Exception as alt_error:
+                logging.error(f"STEP 7 - Alternative approach also failed: {alt_error}")
+                raise
 
         if response.status_code != 200:
             # Avoid logging raw response.text if your sink is not UTF-8
